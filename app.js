@@ -40,19 +40,19 @@ const POWER_SPAN = 1550;
 const MESH_TILE = 46;
 const RESET_DELAY = 900;
 const ROLL_GAIN = 0.55;
-const CURVE_SPIN_MAX = 18;
+const CURVE_SPIN_MAX = 8.5;
 /** en dessous : pas de déviation (tir quasi droit / spin accidentel) */
 const CURVE_DEADZONE = 2.75;
 /** ignore les micro-rotations du doigt en visant */
 const SPIN_ACCUM_MIN = 0.085;
 /** gain par radian tourné autour du ballon */
-const SPIN_GAIN = 9.2;
-/** décroissance lente pendant la visée (inertie) */
-const SPIN_AIM_DECAY = 0.62;
+const SPIN_GAIN = 5.2;
+/** décroissance pendant la visée (un peu d’inertie, pas trop) */
+const SPIN_AIM_DECAY = 0.28;
 /** rad/s de courbure de trajectoire (arc) */
-const CURVE_TURN = 1.45;
-/** décroissance du spin en vol (plus haut = plus d’inertie) */
-const CURVE_FLIGHT_DECAY = 0.997;
+const CURVE_TURN = 1.05;
+/** décroissance du spin en vol */
+const CURVE_FLIGHT_DECAY = 0.993;
 const FLIGHT_ROLL = 0.085;
 const BOUNCE = 0.34;
 /** hitbox collision balle (centre du ballon blanc) */
@@ -1723,11 +1723,11 @@ game.addEventListener("pointermove", (e) => {
     let dAng = ang - lastSpinAng;
     dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
     if (Math.abs(dAng) >= SPIN_ACCUM_MIN) {
-      ballSpin += dAng * 0.85;
+      ballSpin += dAng * 0.45;
       spinVel += dAng * SPIN_GAIN;
       spinVel = clamp(spinVel, -CURVE_SPIN_MAX, CURVE_SPIN_MAX);
-      patX = wrapMesh(patX + dAng * 14);
-      patY = wrapMesh(patY + Math.abs(dAng) * 5);
+      patX = wrapMesh(patX + dAng * 10);
+      patY = wrapMesh(patY + Math.abs(dAng) * 3.5);
     }
   }
   if (dist > 10) {
@@ -1806,8 +1806,8 @@ function endAim(e) {
   } else {
     const sign = rawSpin < 0 ? -1 : 1;
     const excess = Math.abs(rawSpin) - CURVE_DEADZONE;
-    // plusieurs tours → courbe nettement plus forte (rampe non linéaire)
-    flightSpin = sign * (excess + excess * excess * 0.085);
+    // plusieurs tours → un peu plus de courbe, sans exploser
+    flightSpin = sign * (excess + excess * excess * 0.04);
   }
   spinVel = 0;
   crowdHelpUsed = false;
@@ -1833,8 +1833,8 @@ function loop(now) {
 
   if (state === "aiming") {
     if (Math.abs(spinVel) > 0.002) {
-      ballSpin += spinVel * dt * 0.9;
-      patX = wrapMesh(patX + spinVel * dt * 9);
+      ballSpin += spinVel * dt * 0.5;
+      patX = wrapMesh(patX + spinVel * dt * 6);
       spinVel *= Math.pow(SPIN_AIM_DECAY, dt);
       render();
     }
@@ -1862,7 +1862,7 @@ function loop(now) {
           vx = Math.cos(na) * spd;
           vy = Math.sin(na) * spd;
         }
-        ballSpin += flightSpin * sdt * 1.55;
+        ballSpin += flightSpin * sdt * 1.05;
         flightSpin *= Math.pow(CURVE_FLIGHT_DECAY, sdt * 60);
       }
       x += vx * sdt;
