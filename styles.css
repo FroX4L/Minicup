@@ -243,6 +243,50 @@ body {
   touch-action: none;
 }
 
+.hud {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  pointer-events: none;
+}
+
+.hud-lives {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.hud-ball {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  opacity: 0.28;
+  transform: scale(0.92);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  user-select: none;
+  pointer-events: none;
+}
+
+.hud-ball.is-on {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.hud-score {
+  font-family: "Outfit", sans-serif;
+  font-weight: 800;
+  font-size: 1.65rem;
+  letter-spacing: -0.04em;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  line-height: 1;
+}
+
 .game-bg {
   position: absolute;
   inset: 0;
@@ -275,20 +319,41 @@ body {
   height: auto;
   user-select: none;
   transform-origin: center bottom;
+  position: relative;
+  z-index: 0;
 }
 
 .keeper {
   position: absolute;
   left: 50%;
-  bottom: 2%;
+  bottom: -4px;
   transform: translateX(-50%);
   width: 44%;
-  height: auto;
+  aspect-ratio: 1;
   z-index: 2;
   pointer-events: none;
   user-select: none;
-  image-rendering: auto;
   will-change: left, transform;
+}
+
+.keeper__body,
+.keeper__head {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.keeper__body {
+  z-index: 0;
+}
+
+.keeper__head {
+  z-index: 1;
 }
 
 .hitbox-bg {
@@ -319,13 +384,21 @@ body {
 .goal-marker {
   position: absolute;
   border-radius: 50%;
-  background: rgba(220, 30, 30, 0.85);
-  border: 3px solid #ff4d4d;
-  box-shadow: 0 0 12px rgba(255, 60, 60, 0.55);
-  z-index: 6;
+  background: #ff1a1a;
+  border: none;
+  box-shadow: none;
+  z-index: 1;
   pointer-events: none;
   transform: translate(-50%, -50%);
   opacity: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Outfit", sans-serif;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
 
 .goal-marker.is-fade {

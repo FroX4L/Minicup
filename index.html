@@ -31,18 +31,29 @@
   </main>
 
   <section class="game" id="game" hidden>
+    <div class="hud" id="hud">
+      <div class="hud-lives" id="livesEl" aria-label="Ballons restants">
+        <img class="hud-ball is-on" data-life="0" src="ball.png" alt="" draggable="false" />
+        <img class="hud-ball is-on" data-life="1" src="ball.png" alt="" draggable="false" />
+        <img class="hud-ball is-on" data-life="2" src="ball.png" alt="" draggable="false" />
+      </div>
+      <div class="hud-score" aria-label="Score"><span id="scoreVal">0</span></div>
+    </div>
+
     <img class="game-bg" src="bg.png" alt="" draggable="false" />
     <img class="game-bg hitbox-bg" id="hitboxBg" src="hitbox_bg.png" alt="" draggable="false" />
 
     <div class="goal-area" id="goalArea">
       <div class="cage-wrap">
         <img class="cage" id="cage" src="cage.png" alt="" draggable="false" />
-        <img class="keeper" id="keeper" src="Gardien_walk1.png" alt="" draggable="false" />
+        <div class="goal-marker" id="goalMarker" hidden></div>
+        <div class="keeper" id="keeper" aria-hidden="true">
+          <img class="keeper__body" id="keeperBody" src="Gardien_walk_bas1.png" alt="" draggable="false" />
+          <img class="keeper__head" id="keeperHead" src="Gardien_head_idle.png" alt="" draggable="false" />
+        </div>
         <img class="cage hitbox-cage" id="hitboxCage" src="hitbox_cage.png" alt="" draggable="false" />
       </div>
     </div>
-
-    <div class="goal-marker" id="goalMarker" hidden></div>
 
     <div class="fb-ball" id="ball" aria-hidden="true">
       <div class="fb-ball__sphere">
@@ -129,7 +140,7 @@
     </div>
   </section>
 
-  <script src="app.js?v=43"></script>
+  <script src="app.js?v=59"></script>
   <!-- Logique jeu / hitbox : app.js (pas dans ce fichier HTML) -->
 </body>
 </html>

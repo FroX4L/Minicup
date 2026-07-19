@@ -8,7 +8,11 @@ const ghostPatternEl = document.getElementById("ghostPattern");
 const goalArea = document.getElementById("goalArea");
 const cageEl = document.getElementById("cage");
 const keeperEl = document.getElementById("keeper");
+const keeperBodyEl = document.getElementById("keeperBody");
+const keeperHeadEl = document.getElementById("keeperHead");
 const goalMarker = document.getElementById("goalMarker");
+const scoreValEl = document.getElementById("scoreVal");
+const livesEl = document.getElementById("livesEl");
 const hitboxBgImg = document.getElementById("hitboxBg");
 const hitboxCageImg = document.getElementById("hitboxCage");
 
@@ -30,15 +34,24 @@ const BOUNCE = 0.34;
 const BALL_HIT = 10;
 const RECOVER_DELAY = 300;
 const BOUNCE_LIFE = 1000;
-const KEEPER_FRAMES = ["Gardien_walk1.png", "Gardien_walk2.png"];
+const SIDE_MARGIN = 0.04; // annule si trop près des bords
+const KEEPER_FRAMES = ["Gardien_walk_bas1.png", "Gardien_walk_bas2.png"];
+const KEEPER_HEAD = "Gardien_head_idle.png";
+const KEEPER_HEAD_SMILE = "Gardien_head_souriant.png";
+const KEEPER_HIT = "Gardien_Goal_hit.png";
 const KEEPER_FRAME_MS = 270;
+const KEEPER_CELEBRATE_MS = 1000;
 const KEEPER_MIN_X = 0.16;
 const KEEPER_MAX_X = 0.84;
 const KEEPER_SPEED_BASE = 0.14;
 const KEEPER_SPEED_PER_GOAL = 0.045;
 const KEEPER_BOB_PX = 3.5;
-/** masques alpha dynamiques du gardien (1 par frame) */
-const keeperMasks = [null, null];
+const KEEPER_BASE_Y = 10; // descend un peu
+const KEEPER_BOUNCE_MS = 320;
+const KEEPER_BOUNCE_PX = 9;
+/** masques alpha : corps (2 frames) + tête */
+const keeperBodyMasks = [null, null];
+let keeperHeadMask = null;
 /** bande sol hitbox_bg (bleu), ratios hauteur image */
 /** bande hitbox_bg : rouge=vide, bleu=sol */
 const BG_RED_BOT = 0.225;
@@ -91,8 +104,13 @@ let keeperFrame = 0;
 let keeperX = 0.5;
 let keeperDir = -1;
 let goalCount = 0;
+let score = 0;
+let lives = 3;
+let keeperCelebrating = false;
+let keeperCelebrateTimer = null;
+let keeperBounceAt = 0;
 
-function loadKeeperMask(src, idx) {
+function loadKeeperMask(src, onDone) {
   const img = new Image();
   img.decoding = "async";
   img.onload = () => {
@@ -102,18 +120,50 @@ function loadKeeperMask(src, idx) {
     const ctx = c.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);
     try {
-      keeperMasks[idx] = ctx.getImageData(0, 0, c.width, c.height);
+      onDone(ctx.getImageData(0, 0, c.width, c.height));
     } catch (_) {
-      keeperMasks[idx] = { width: c.width, height: c.height, data: null };
+      onDone({ width: c.width, height: c.height, data: null });
     }
   };
   img.src = src;
 }
 
-KEEPER_FRAMES.forEach((src, i) => loadKeeperMask(src, i));
+KEEPER_FRAMES.forEach((src, i) => {
+  loadKeeperMask(src, (mask) => { keeperBodyMasks[i] = mask; });
+});
+loadKeeperMask(KEEPER_HEAD, (mask) => { keeperHeadMask = mask; });
+
+function keeperFlipScaleX() {
+  return keeperDir > 0 ? -1 : 1;
+}
+
+function keeperBounceY(now) {
+  const t = (now - keeperBounceAt) / KEEPER_BOUNCE_MS;
+  if (t < 0 || t >= 1) return 0;
+  return -Math.sin(t * Math.PI) * KEEPER_BOUNCE_PX;
+}
+
+function keeperBounceScale(now) {
+  const t = (now - keeperBounceAt) / KEEPER_BOUNCE_MS;
+  if (t < 0 || t >= 1) return 1;
+  if (t < 0.35) return 1 + 0.16 * (t / 0.35);
+  if (t < 0.7) return 1.16 - 0.22 * ((t - 0.35) / 0.35);
+  return 0.94 + 0.06 * ((t - 0.7) / 0.3);
+}
 
 function updateKeeper(dt) {
   if (!keeperEl || game.hidden) return;
+  const now = performance.now();
+  const fx = keeperFlipScaleX();
+
+  if (keeperCelebrating) {
+    const by = KEEPER_BASE_Y + keeperBounceY(now);
+    const sc = keeperBounceScale(now);
+    keeperEl.style.left = `${keeperX * 100}%`;
+    keeperEl.style.transform = `translateX(-50%) translateY(${by}px) scale(${sc * fx}, ${sc})`;
+    return;
+  }
+
   const speed = KEEPER_SPEED_BASE + goalCount * KEEPER_SPEED_PER_GOAL;
   keeperX += keeperDir * speed * dt;
   if (keeperX <= KEEPER_MIN_X) {
@@ -124,18 +174,32 @@ function updateKeeper(dt) {
     keeperDir = -1;
   }
   keeperEl.style.left = `${keeperX * 100}%`;
-  // bob un peu moins smooth
   const bobHz = 1000 / KEEPER_FRAME_MS;
-  const s = Math.sin(performance.now() * 0.001 * bobHz * Math.PI * 2);
+  const s = Math.sin(now * 0.001 * bobHz * Math.PI * 2);
   const bobY = Math.sign(s) * Math.pow(Math.abs(s), 0.55) * KEEPER_BOB_PX;
-  const flip = keeperDir > 0 ? " scaleX(-1)" : "";
-  keeperEl.style.transform = `translateX(-50%) translateY(${bobY}px)${flip}`;
+  keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y + bobY}px) scale(${fx}, 1)`;
+}
+
+function playKeeperSaveAnim() {
+  keeperCelebrating = true;
+  keeperBounceAt = performance.now();
+  clearTimeout(keeperCelebrateTimer);
+  if (keeperBodyEl) keeperBodyEl.src = KEEPER_HIT;
+  if (keeperHeadEl) keeperHeadEl.src = KEEPER_HEAD_SMILE;
+  const fx = keeperFlipScaleX();
+  keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
+
+  keeperCelebrateTimer = setTimeout(() => {
+    keeperCelebrating = false;
+    if (keeperBodyEl) keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
+    if (keeperHeadEl) keeperHeadEl.src = KEEPER_HEAD;
+  }, KEEPER_CELEBRATE_MS);
 }
 
 setInterval(() => {
-  if (!keeperEl) return;
+  if (!keeperBodyEl || keeperCelebrating) return;
   keeperFrame = 1 - keeperFrame;
-  keeperEl.src = KEEPER_FRAMES[keeperFrame];
+  keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
 }, KEEPER_FRAME_MS);
 
 startBtn.addEventListener("pointerdown", () => startBtn.classList.add("is-pressed"));
@@ -147,6 +211,10 @@ startBtn.addEventListener("click", () => {
   game.hidden = false;
   requestAnimationFrame(() => {
     layout();
+    score = 0;
+    goalCount = 0;
+    lives = 3;
+    updateHud();
     resetBall(false);
     lastT = performance.now();
     requestAnimationFrame(loop);
@@ -226,41 +294,110 @@ function resetBall(animate, durMs) {
   requestAnimationFrame(slide);
 }
 
+function updateHud() {
+  if (scoreValEl) scoreValEl.textContent = String(score);
+  if (!livesEl) return;
+  livesEl.querySelectorAll(".hud-ball").forEach((el, i) => {
+    el.classList.toggle("is-on", i < lives);
+  });
+}
+
+function loseLife() {
+  lives = Math.max(0, lives - 1);
+  if (lives <= 0) {
+    score = 0;
+    goalCount = 0;
+    lives = 3;
+  }
+  updateHud();
+}
+
+function addScore() {
+  score += 1;
+  goalCount += 1;
+  updateHud();
+}
+
 function stopOnGoal(zone) {
   setBallRing(false);
   bounceCage();
-  showGoalMarker(zone || "red");
-  goalCount += 1;
+  addScore();
+  showGoalMarker();
   beginGroundBounce(true);
 }
 
 function stopOnGreen() {
   setBallRing(false);
   bounceCage();
+  loseLife();
   beginGroundBounce(true);
 }
 
 function stopOnKeeper() {
   setBallRing(false);
-  bounceCage();
+  playKeeperSaveAnim();
+  loseLife();
   beginGroundBounce(true);
 }
 
 /** Raté / hors terrain = 0 */
 function stopOnMiss() {
   setBallRing(false);
+  loseLife();
   beginGroundBounce(false);
 }
 
-/** Sorti sur les côtés */
-function stopOnSideOut() {
+/** Trop sur les côtés → continue de rouler + fade, puis revient */
+function beginSideExit() {
+  if (state !== "flying") return;
+  state = "sideOut";
   setBallRing(false);
-  vx = 0;
-  vy = 0;
-  ballEl.classList.remove("is-flying");
-  ballEl.style.opacity = "0";
-  state = "reset";
-  scheduleRecover();
+  // pousse vers l’extérieur pour finir la sortie
+  if (x < game.clientWidth * 0.5) {
+    vx = -Math.max(Math.abs(vx), 120);
+  } else {
+    vx = Math.max(Math.abs(vx), 120);
+  }
+}
+
+function updateSideExit(dt) {
+  const w = game.clientWidth;
+  const h = game.clientHeight;
+  const scale = depthScale(y);
+  const r = (BALL_SIZE / 2) * scale;
+
+  vx *= Math.pow(DRAG, dt * 60);
+  vy *= Math.pow(0.99, dt * 60);
+  x += vx * dt;
+  y += vy * dt;
+
+  patX = wrapMesh(patX + vx * FLIGHT_ROLL * dt);
+  patY = wrapMesh(patY + Math.abs(vy) * FLIGHT_ROLL * 0.5 * dt);
+
+  // fade selon la sortie de l’écran
+  let visible = 1;
+  if (x < r) visible = clamp((x + r) / (r * 2 + w * SIDE_MARGIN), 0, 1);
+  else if (x > w - r) visible = clamp((w + r - x) / (r * 2 + w * SIDE_MARGIN), 0, 1);
+  ballEl.style.opacity = String(visible);
+  render();
+
+  if (x + r < -4 || x - r > w + 4 || y < -r || y > h + r) {
+    ballEl.style.opacity = "0";
+    state = "reset";
+    vx = 0;
+    vy = 0;
+    ballEl.classList.remove("is-flying");
+    loseLife();
+    scheduleRecover();
+  }
+}
+
+function isPastSideLimit(px = x, py = y) {
+  const w = game.clientWidth;
+  const margin = w * SIDE_MARGIN;
+  const scale = depthScale(py);
+  const r = (BALL_SIZE / 2) * scale * 0.85;
+  return px - r < margin || px + r > w - margin;
 }
 
 /** Zone rouge hitbox_bg = vide → balle revient */
@@ -271,6 +408,7 @@ function stopOnVoid() {
   ballEl.classList.remove("is-flying");
   ballEl.style.opacity = "0";
   state = "reset";
+  loseLife();
   scheduleRecover();
 }
 
@@ -547,18 +685,20 @@ function probeKeeperAtScreen(cx, cy) {
     [-half, -half], [half, -half], [-half, half], [half, half],
     [-half, 0], [half, 0], [0, -half], [0, half],
   ];
-  const mask = keeperMasks[keeperFrame];
-  if (!mask) return false;
+  const bodyMask = keeperBodyMasks[keeperFrame];
+  if (!bodyMask && !keeperHeadMask) return false;
+  const mw = (bodyMask || keeperHeadMask).width;
+  const mh = (bodyMask || keeperHeadMask).height;
   let hits = 0;
   for (const [ox, oy] of offsets) {
     const px = cx + ox;
     const py = cy + oy;
     if (px < rect.left || px > rect.right || py < rect.top || py > rect.bottom) continue;
     let u = (px - rect.left) / rect.width;
-    if (keeperDir > 0) u = 1 - u; // miroir CSS
-    const mx = Math.floor(u * mask.width);
-    const my = Math.floor(((py - rect.top) / rect.height) * mask.height);
-    if (keeperAlphaAt(mx, my, mask)) hits++;
+    if (keeperDir > 0) u = 1 - u;
+    const mx = Math.floor(u * mw);
+    const my = Math.floor(((py - rect.top) / rect.height) * mh);
+    if (keeperAlphaAt(mx, my, bodyMask) || keeperAlphaAt(mx, my, keeperHeadMask)) hits++;
   }
   return hits >= 1;
 }
@@ -593,22 +733,21 @@ function bounceCage() {
   cageEl.classList.add("is-bounce");
 }
 
-function showGoalMarker(zone) {
+function showGoalMarker() {
   const ball = ballEl.getBoundingClientRect();
-  const g = game.getBoundingClientRect();
-  const size = Math.max(28, ball.width);
-  const colors = {
-    red: "rgba(220, 30, 30, 0.85)",
-    blue: "rgba(40, 90, 255, 0.85)",
-    violet: "rgba(160, 40, 220, 0.85)",
-  };
+  const wrap = document.querySelector(".cage-wrap").getBoundingClientRect();
+  const size = Math.max(36, ball.width * 1.05);
   goalMarker.hidden = false;
   goalMarker.classList.remove("is-fade");
+  goalMarker.textContent = String(score);
   goalMarker.style.width = `${size}px`;
   goalMarker.style.height = `${size}px`;
-  goalMarker.style.left = `${ball.left - g.left + ball.width / 2}px`;
-  goalMarker.style.top = `${ball.top - g.top + ball.height / 2}px`;
-  goalMarker.style.background = colors[zone] || colors.red;
+  goalMarker.style.fontSize = `${Math.max(16, size * 0.42)}px`;
+  goalMarker.style.left = `${ball.left - wrap.left + ball.width / 2}px`;
+  goalMarker.style.top = `${ball.top - wrap.top + ball.height / 2}px`;
+  goalMarker.style.background = "#ff1a1a";
+  goalMarker.style.border = "none";
+  goalMarker.style.boxShadow = "none";
   goalMarker.style.opacity = "1";
   clearTimeout(showGoalMarker._t1);
   clearTimeout(showGoalMarker._t2);
@@ -617,6 +756,7 @@ function showGoalMarker(zone) {
     showGoalMarker._t2 = setTimeout(() => {
       goalMarker.hidden = true;
       goalMarker.classList.remove("is-fade");
+      goalMarker.textContent = "";
     }, 300);
   }, 1000);
 }
@@ -729,7 +869,7 @@ game.addEventListener("pointermove", (e) => {
     patY = wrapMesh(patY + (p.y - lastAim.y) * ROLL_GAIN);
   }
   lastAim = p;
-  x = clamp(p.x, BALL_SIZE * 0.35, game.clientWidth - BALL_SIZE * 0.35);
+  x = clamp(p.x, game.clientWidth * SIDE_MARGIN + BALL_SIZE * 0.2, game.clientWidth * (1 - SIDE_MARGIN) - BALL_SIZE * 0.2);
   // Large zone vers le bas pour prendre de l'élan
   y = clamp(p.y, nearY - 50, Math.min(game.clientHeight - BALL_SIZE * 0.35, nearY + game.clientHeight * 0.28));
   render();
@@ -813,6 +953,10 @@ function loop(now) {
       patX = wrapMesh(patX + vx * FLIGHT_ROLL * sdt);
       patY = wrapMesh(patY + vy * FLIGHT_ROLL * sdt);
       render();
+      if (isPastSideLimit()) {
+        beginSideExit();
+        break;
+      }
       resolveHits();
       if (state !== "flying") break;
       prevX = x;
@@ -825,12 +969,16 @@ function loop(now) {
       const scale = depthScale(y);
       const r = (BALL_SIZE / 2) * scale;
       const speed = Math.hypot(vx, vy);
-      if (x < -r || x > w + r) {
-        stopOnSideOut();
+      if (isPastSideLimit()) {
+        beginSideExit();
       } else if (y < -r || y > h + r || (speed < 35 && y < nearY - 80)) {
         stopOnMiss();
       }
     }
+  }
+
+  if (state === "sideOut") {
+    updateSideExit(dt);
   }
 
   if (ghostActive) {
