@@ -10,6 +10,7 @@ const soundBtnGame = document.getElementById("soundBtnGame");
 const menu = document.getElementById("menu");
 const game = document.getElementById("game");
 const loseScreen = document.getElementById("loseScreen");
+const loseScoreVal = document.getElementById("loseScoreVal");
 const hudTeamFlag = document.getElementById("hudTeamFlag");
 const ballEl = document.getElementById("ball");
 const patternEl = document.getElementById("ballPattern");
@@ -558,7 +559,20 @@ function startLoseSequence() {
       void scoreRecapEl.offsetWidth;
       scoreRecapEl.classList.add("is-flash");
     }
-    dots.forEach((d, i) => d.classList.toggle("is-lit", i < step));
+    dots.forEach((d, i) => {
+      d.classList.toggle("is-lit", i < step);
+      d.classList.remove("is-impact");
+    });
+    const lit = dots[step - 1];
+    if (lit) {
+      void lit.offsetWidth;
+      lit.classList.add("is-impact");
+    }
+    if (game) {
+      game.classList.remove("is-recap-shake");
+      void game.offsetWidth;
+      game.classList.add("is-recap-shake");
+    }
     loseSeqTimer = setTimeout(flashNext, STEP_MS);
   };
 
@@ -576,6 +590,7 @@ function startLoseSequence() {
 function finishLoseSequence() {
   clearLoseSequenceTimers();
   clearGoalRecapDots();
+  if (game) game.classList.remove("is-recap-shake");
   if (scoreRecapEl) {
     scoreRecapEl.hidden = true;
     scoreRecapEl.classList.remove("is-flash");
@@ -599,6 +614,7 @@ function showLoseMenu() {
   }, KEEPER_WIN_MS);
   if (ballEl) ballEl.hidden = true;
   if (ghostEl) ghostEl.hidden = true;
+  if (loseScoreVal) loseScoreVal.textContent = String(score);
   if (loseScreen) loseScreen.hidden = false;
   playSfx("lose");
 }

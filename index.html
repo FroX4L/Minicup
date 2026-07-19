@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=99" />
+  <link rel="stylesheet" href="styles.css?v=101" />
 </head>
 <body>
   <main class="screen" id="menu">
@@ -215,14 +215,14 @@
       </div>
     </div>
     <div class="lose" id="loseScreen" hidden>
-      <h2 class="lose-title">Perdu!</h2>
+      <p class="lose-score" id="loseScoreVal" aria-label="Score">0</p>
       <button type="button" class="start" id="replayBtn">
         <span>Rejouer</span>
       </button>
     </div>
   </section>
 
-  <script src="app.js?v=118"></script>
+  <script src="app.js?v=120"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
