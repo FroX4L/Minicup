@@ -40,8 +40,10 @@ const MESH_TILE = 46;
 const RESET_DELAY = 900;
 const ROLL_GAIN = 0.55;
 const CURVE_SPIN_MAX = 6.5;
-/** en dessous : pas de déviation (tir quasi droit) */
-const CURVE_DEADZONE = 0.95;
+/** en dessous : pas de déviation (tir quasi droit / spin accidentel) */
+const CURVE_DEADZONE = 2.75;
+/** ignore les micro-rotations du doigt en visant */
+const SPIN_ACCUM_MIN = 0.085;
 /** rad/s de courbure de trajectoire (arc) */
 const CURVE_TURN = 1.05;
 const FLIGHT_ROLL = 0.085;
@@ -1694,16 +1696,19 @@ game.addEventListener("pointermove", (e) => {
 
   const ang = Math.atan2(p.y - y, p.x - x);
   const dist = Math.hypot(p.x - x, p.y - y);
-  if (hasSpinAng && dist > 10) {
+  // Spin courbe = doigt qui tourne autour du ballon (pas le simple drag de visée)
+  if (hasSpinAng && dist > 16) {
     let dAng = ang - lastSpinAng;
     dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
-    ballSpin += dAng * 0.55;
-    spinVel += dAng * 7.8;
-    spinVel = clamp(spinVel, -CURVE_SPIN_MAX, CURVE_SPIN_MAX);
-    patX = wrapMesh(patX + dAng * 12);
-    patY = wrapMesh(patY + Math.abs(dAng) * 4);
+    if (Math.abs(dAng) >= SPIN_ACCUM_MIN) {
+      ballSpin += dAng * 0.55;
+      spinVel += dAng * 7.8;
+      spinVel = clamp(spinVel, -CURVE_SPIN_MAX, CURVE_SPIN_MAX);
+      patX = wrapMesh(patX + dAng * 12);
+      patY = wrapMesh(patY + Math.abs(dAng) * 4);
+    }
   }
-  if (dist > 6) {
+  if (dist > 10) {
     lastSpinAng = ang;
     hasSpinAng = true;
   }
