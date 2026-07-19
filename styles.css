@@ -881,11 +881,10 @@ body {
   z-index: 3;
   pointer-events: none;
   overflow: visible;
-  --pion-speed: 1;
 }
 
 .pions.is-frenzy {
-  --pion-speed: 4.2;
+  filter: brightness(1.18) saturate(1.12);
 }
 
 .pion {
@@ -903,7 +902,7 @@ body {
   pointer-events: auto;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  animation: pion-bob calc(var(--period, 0.5s) / var(--pion-speed, 1)) ease-in-out infinite;
+  animation: pion-bob var(--period, 0.5s) ease-in-out infinite;
   animation-delay: var(--delay, 0s);
 }
 

@@ -382,12 +382,12 @@ function bounceKeeperSoft() {
   bounceKeeperPart(keeperBodyEl, "is-body-bounce-soft");
 }
 
-function setKeeperHead(src) {
+function setKeeperHead(src, withBounce = true) {
   if (!keeperHeadEl) return;
   if (keeperHeadEl.getAttribute("src") !== src) {
     keeperHeadEl.src = src;
   }
-  bounceKeeperHead();
+  if (withBounce) bounceKeeperHead();
 }
 
 function playKeeperSaveAnim() {
@@ -397,23 +397,23 @@ function playKeeperSaveAnim() {
   clearTimeout(keeperCelebrateTimer);
   clearTimeout(keeperHeadTimer);
   if (keeperBodyEl) keeperBodyEl.src = KEEPER_HIT;
-  setKeeperHead(KEEPER_HEAD_SMILE);
+  setKeeperHead(KEEPER_HEAD_SMILE, false);
   const fx = keeperFlipScaleX();
   keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
 
   keeperCelebrateTimer = setTimeout(() => {
     keeperCelebrating = false;
     if (keeperBodyEl) keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
-    setKeeperHead(KEEPER_HEAD);
+    setKeeperHead(KEEPER_HEAD, false);
   }, KEEPER_CELEBRATE_MS);
 }
 
-function playKeeperAnxiousHead(ms = KEEPER_ANXIOUS_MS) {
+function playKeeperAnxiousHead(ms = KEEPER_ANXIOUS_MS, withBounce = false) {
   if (gameOver || keeperCelebrating) return;
   clearTimeout(keeperHeadTimer);
-  setKeeperHead(KEEPER_HEAD_ANXIOUS);
+  setKeeperHead(KEEPER_HEAD_ANXIOUS, withBounce);
   keeperHeadTimer = setTimeout(() => {
-    if (!keeperCelebrating) setKeeperHead(KEEPER_HEAD);
+    if (!keeperCelebrating) setKeeperHead(KEEPER_HEAD, false);
   }, ms);
 }
 
@@ -696,47 +696,31 @@ let soundOn = true;
   if (s != null) soundOn = s !== "0";
 }
 
-const sfx = {
-  kick: new Audio("kick.mp3"),
-  filet: new Audio("filet.mp3"),
-  lose: new Audio("lose.mp3"),
-  laugh: new Audio("laugh.mp3"),
-  stop: new Audio("stop.mp3"),
-  win1: new Audio("win1.mp3"),
-  win2: new Audio("win2.mp3"),
-  win3: new Audio("win3.mp3"),
-  win4: new Audio("win4.mp3"),
-  metal1: new Audio("metal1.mp3"),
-  metal2: new Audio("metal2.mp3"),
+const sfxUrls = {
+  kick: "kick.mp3",
+  filet: "filet.mp3",
+  lose: "lose.mp3",
+  laugh: "laugh.mp3",
+  stop: "stop.mp3",
+  win1: "win1.mp3",
+  win2: "win2.mp3",
+  win3: "win3.mp3",
+  win4: "win4.mp3",
+  metal1: "metal1.mp3",
+  metal2: "metal2.mp3",
 };
-Object.values(sfx).forEach((a) => {
-  a.preload = "metadata";
-  a.volume = 0.85;
-});
-sfx.win1.volume = 0.38;
-sfx.win2.volume = 0.38;
-sfx.win3.volume = 0.38;
-sfx.win4.volume = 0.38;
+/** @type {Record<string, AudioBuffer>} */
+const sfxBuf = {};
+/** @type {AudioBufferSourceNode | null} */
+let laughSource = null;
+let audioWarmed = false;
 
-function playSfx(name) {
-  if (!soundOn) return;
-  const a = sfx[name];
-  if (!a) return;
-  try {
-    a.currentTime = 0;
-    const p = a.play();
-    if (p && typeof p.catch === "function") p.catch(() => {});
-  } catch (_) {}
-}
-
-function stopSfx(name) {
-  const a = sfx[name];
-  if (!a) return;
-  try {
-    a.pause();
-    a.currentTime = 0;
-  } catch (_) {}
-}
+const sfxVol = {
+  win1: 0.38,
+  win2: 0.38,
+  win3: 0.38,
+  win4: 0.38,
+};
 
 let audioCtx = null;
 function getAudioCtx() {
@@ -747,6 +731,74 @@ function getAudioCtx() {
   }
   if (audioCtx.state === "suspended") audioCtx.resume();
   return audioCtx;
+}
+
+function warmAudio() {
+  if (audioWarmed) return;
+  audioWarmed = true;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  Object.entries(sfxUrls).forEach(([name, url]) => {
+    fetch(url)
+      .then((r) => r.arrayBuffer())
+      .then((ab) => ctx.decodeAudioData(ab.slice(0)))
+      .then((buf) => {
+        sfxBuf[name] = buf;
+      })
+      .catch(() => {});
+  });
+  // Précharge images gardien (évite decode au but)
+  [
+    KEEPER_HEAD,
+    KEEPER_HEAD_SMILE,
+    KEEPER_HEAD_ANXIOUS,
+    KEEPER_HIT,
+    KEEPER_FRAMES[0],
+    KEEPER_FRAMES[1],
+    KEEPER_WIN[0],
+    KEEPER_WIN[1],
+    KEEPER_LAUGH,
+    ...KEEPER_HEAD_LAUGH_A,
+    ...KEEPER_HEAD_LAUGH_B,
+  ].forEach((src) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.src = src;
+  });
+}
+
+function playSfx(name) {
+  if (!soundOn) return;
+  const ctx = getAudioCtx();
+  const buf = sfxBuf[name];
+  if (ctx && buf) {
+    try {
+      if (name === "laugh" && laughSource) {
+        try {
+          laughSource.stop();
+        } catch (_) {}
+        laughSource = null;
+      }
+      const src = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      gain.gain.value = sfxVol[name] != null ? sfxVol[name] : 0.85;
+      src.buffer = buf;
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(0);
+      if (name === "laugh") laughSource = src;
+      return;
+    } catch (_) {}
+  }
+}
+
+function stopSfx(name) {
+  if (name === "laugh" && laughSource) {
+    try {
+      laughSource.stop();
+    } catch (_) {}
+    laughSource = null;
+  }
 }
 
 /** Clic UI basique (synthèse) */
@@ -939,6 +991,7 @@ if (teamsPanel) {
 }
 
 startBtn.addEventListener("click", () => {
+  warmAudio();
   if (teamsPanel) teamsPanel.hidden = true;
   menu.hidden = true;
   game.hidden = false;
@@ -956,6 +1009,11 @@ startBtn.addEventListener("click", () => {
     lastT = performance.now();
     requestAnimationFrame(loop);
   });
+});
+
+// Décode l’audio dès la 1ʳᵉ interaction menu
+["pointerdown", "touchstart", "click"].forEach((ev) => {
+  window.addEventListener(ev, warmAudio, { once: true, passive: true });
 });
 
 if (replayBtn) {
@@ -983,6 +1041,12 @@ function layout() {
   const goal = goalArea.getBoundingClientRect();
   const g = game.getBoundingClientRect();
   farY = goal.top - g.top + goal.height * 0.35;
+  const wrap = document.querySelector(".cage-wrap");
+  if (wrap) {
+    const wr = wrap.getBoundingClientRect();
+    cageWrapOffset.x = wr.left - g.left;
+    cageWrapOffset.y = wr.top - g.top;
+  }
 }
 
 function resetBall(animate, durMs) {
@@ -1085,14 +1149,15 @@ function stopOnGoal(zone) {
   setBallRing(false);
   addScore();
   beginGroundBounce(true, true);
-  // FX décalés d’1 frame → évite le freeze FPS au moment du but
+  // Un seul son + FX étalés sur 2 frames (évite le gros hitch)
+  playSfx(`win${1 + Math.floor(Math.random() * 4)}`);
   requestAnimationFrame(() => {
     showGoalMarker();
-    bounceCage();
     playKeeperAnxiousHead();
-    frenzyPions();
-    playSfx("filet");
-    playSfx(`win${1 + Math.floor(Math.random() * 4)}`);
+    requestAnimationFrame(() => {
+      bounceCage();
+      frenzyPions();
+    });
   });
 }
 
@@ -1130,7 +1195,7 @@ function buildPions() {
     "pion_04.png", "pion_05.png", "pion_06.png",
   ];
   wrap.innerHTML = "";
-  const count = 24;
+  const count = 16;
   for (let i = 0; i < count; i++) {
     const img = document.createElement("img");
     img.className = "pion";
@@ -1274,19 +1339,10 @@ function hideGhost() {
 /** Fantôme : saut + sol 1s ; balle joueur revient (immédiat si but) */
 function beginGroundBounce(fromCage, recoverNow = false) {
   if (gameOver) return;
-  gx = x;
-  gy = y;
-  gpatX = patX;
-  gpatY = patY;
-  gvx = (Math.random() - 0.5) * (fromCage ? 28 : 40);
-  gvy = fromCage ? -(240 + Math.random() * 60) : 30 + Math.random() * 40;
-  bounceEndAt = performance.now() + BOUNCE_LIFE;
-  ghostActive = true;
-  ghostEl.hidden = false;
-  ghostEl.style.opacity = "1";
-  ghostEl.classList.add("is-flying");
-  renderGhost();
-
+  const sgx = x;
+  const sgy = y;
+  const spatX = patX;
+  const spatY = patY;
   ballEl.style.opacity = "0";
   ballEl.classList.remove("is-flying");
   setBallRing(false);
@@ -1299,6 +1355,22 @@ function beginGroundBounce(fromCage, recoverNow = false) {
   } else {
     scheduleRecover();
   }
+  // Ghost + styles lourds au frame suivant
+  requestAnimationFrame(() => {
+    if (gameOver) return;
+    gx = sgx;
+    gy = sgy;
+    gpatX = spatX;
+    gpatY = spatY;
+    gvx = (Math.random() - 0.5) * (fromCage ? 28 : 40);
+    gvy = fromCage ? -(240 + Math.random() * 60) : 30 + Math.random() * 40;
+    bounceEndAt = performance.now() + BOUNCE_LIFE;
+    ghostActive = true;
+    ghostEl.hidden = false;
+    ghostEl.style.opacity = "1";
+    ghostEl.classList.add("is-flying");
+    renderGhost();
+  });
 }
 
 function updateGhostBounce(dt, now) {
@@ -1374,6 +1446,7 @@ function render() {
 
 /** Rects layout figés 1×/frame — évite le thrashing pendant les sous-pas */
 const hitRects = { game: null, cage: null, bg: null, keeper: null };
+let cageWrapOffset = { x: 0, y: 0 };
 
 function syncHitRects() {
   hitRects.game = game.getBoundingClientRect();
@@ -1593,29 +1666,19 @@ function bounceCage() {
 
 function showGoalMarker() {
   if (!goalMarker) return;
-  const g = hitRects.game || game.getBoundingClientRect();
-  const wrapEl = document.querySelector(".cage-wrap");
-  if (!wrapEl) return;
-  const wrap = wrapEl.getBoundingClientRect();
   const scale = depthScale(y);
   const ballW = BALL_SIZE * scale;
   const size = Math.max(36, ballW * 1.05);
-  const left = g.left + x - wrap.left;
-  const top = g.top + y - wrap.top;
+  const left = x - cageWrapOffset.x;
+  const top = y - cageWrapOffset.y;
   goalHits.push({ left, top, n: score });
   goalMarker.hidden = false;
   goalMarker.classList.remove("is-fade");
   goalMarker.textContent = String(score);
-  goalMarker.style.width = `${size}px`;
-  goalMarker.style.height = `${size}px`;
-  goalMarker.style.fontSize = `${Math.max(16, size * 0.42)}px`;
-  goalMarker.style.left = `${left}px`;
-  goalMarker.style.top = `${top}px`;
-  goalMarker.style.background = "#e53935";
-  goalMarker.style.border = "none";
-  goalMarker.style.boxShadow = "none";
-  goalMarker.style.opacity = "1";
-  goalMarker.style.visibility = "visible";
+  goalMarker.style.cssText =
+    `width:${size}px;height:${size}px;font-size:${Math.max(16, size * 0.42)}px;` +
+    `left:${left}px;top:${top}px;background:#e53935;border:none;box-shadow:none;` +
+    `opacity:1;visibility:visible`;
   clearTimeout(showGoalMarker._t1);
   clearTimeout(showGoalMarker._t2);
   showGoalMarker._t1 = setTimeout(() => {
