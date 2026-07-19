@@ -39,13 +39,19 @@ const POWER_SPAN = 1550;
 const MESH_TILE = 46;
 const RESET_DELAY = 900;
 const ROLL_GAIN = 0.55;
-const CURVE_SPIN_MAX = 6.5;
+const CURVE_SPIN_MAX = 18;
 /** en dessous : pas de déviation (tir quasi droit / spin accidentel) */
 const CURVE_DEADZONE = 2.75;
 /** ignore les micro-rotations du doigt en visant */
 const SPIN_ACCUM_MIN = 0.085;
+/** gain par radian tourné autour du ballon */
+const SPIN_GAIN = 9.2;
+/** décroissance lente pendant la visée (inertie) */
+const SPIN_AIM_DECAY = 0.62;
 /** rad/s de courbure de trajectoire (arc) */
-const CURVE_TURN = 1.05;
+const CURVE_TURN = 1.45;
+/** décroissance du spin en vol (plus haut = plus d’inertie) */
+const CURVE_FLIGHT_DECAY = 0.997;
 const FLIGHT_ROLL = 0.085;
 const BOUNCE = 0.34;
 /** hitbox collision balle (centre du ballon blanc) */
@@ -1701,11 +1707,11 @@ game.addEventListener("pointermove", (e) => {
     let dAng = ang - lastSpinAng;
     dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
     if (Math.abs(dAng) >= SPIN_ACCUM_MIN) {
-      ballSpin += dAng * 0.55;
-      spinVel += dAng * 7.8;
+      ballSpin += dAng * 0.85;
+      spinVel += dAng * SPIN_GAIN;
       spinVel = clamp(spinVel, -CURVE_SPIN_MAX, CURVE_SPIN_MAX);
-      patX = wrapMesh(patX + dAng * 12);
-      patY = wrapMesh(patY + Math.abs(dAng) * 4);
+      patX = wrapMesh(patX + dAng * 14);
+      patY = wrapMesh(patY + Math.abs(dAng) * 5);
     }
   }
   if (dist > 10) {
@@ -1783,7 +1789,9 @@ function endAim(e) {
     flightSpin = 0;
   } else {
     const sign = rawSpin < 0 ? -1 : 1;
-    flightSpin = sign * (Math.abs(rawSpin) - CURVE_DEADZONE);
+    const excess = Math.abs(rawSpin) - CURVE_DEADZONE;
+    // plusieurs tours → courbe nettement plus forte (rampe non linéaire)
+    flightSpin = sign * (excess + excess * excess * 0.085);
   }
   spinVel = 0;
   crowdHelpUsed = false;
@@ -1809,9 +1817,9 @@ function loop(now) {
 
   if (state === "aiming") {
     if (Math.abs(spinVel) > 0.002) {
-      ballSpin += spinVel * dt * 0.42;
-      patX = wrapMesh(patX + spinVel * dt * 7);
-      spinVel *= Math.pow(0.14, dt);
+      ballSpin += spinVel * dt * 0.9;
+      patX = wrapMesh(patX + spinVel * dt * 9);
+      spinVel *= Math.pow(SPIN_AIM_DECAY, dt);
       render();
     }
   }
@@ -1838,8 +1846,8 @@ function loop(now) {
           vx = Math.cos(na) * spd;
           vy = Math.sin(na) * spd;
         }
-        ballSpin += flightSpin * sdt * 0.95;
-        flightSpin *= Math.pow(0.992, sdt * 60);
+        ballSpin += flightSpin * sdt * 1.55;
+        flightSpin *= Math.pow(CURVE_FLIGHT_DECAY, sdt * 60);
       }
       x += vx * sdt;
       y += vy * sdt;
