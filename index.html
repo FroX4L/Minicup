@@ -9,11 +9,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=84" />
+  <link rel="stylesheet" href="styles.css?v=90" />
 </head>
 <body>
   <main class="screen" id="menu">
     <img class="menu-bg" src="bg.png" alt="" draggable="false" />
+
+    <button type="button" class="sound-btn" id="soundBtnMenu" aria-label="Son" aria-pressed="true">
+      <span class="sound-btn__on" aria-hidden="true">🔊</span>
+      <span class="sound-btn__off" aria-hidden="true" hidden>🔇</span>
+    </button>
 
     <header class="brand">
       <div class="logo" aria-hidden="true">
@@ -23,11 +28,17 @@
     </header>
 
     <div class="menu-actions">
+      <button type="button" class="start start--diff" id="diffBtn">
+        <span id="diffBtnLabel">Difficulté : Normale</span>
+      </button>
       <button type="button" class="start" id="startBtn">
         <span>Démarrer</span>
       </button>
       <button type="button" class="start start--alt" id="teamPickBtn">
         <span>Choix équipe</span>
+      </button>
+      <button type="button" class="start start--alt" id="scoresBtn">
+        <span>Score</span>
       </button>
     </div>
 
@@ -63,6 +74,11 @@
         </button>
       </div>
     </section>
+
+    <section class="teams scores-panel" id="scoresPanel" hidden aria-label="Scores">
+      <h2 class="teams-title">Score</h2>
+      <div class="team-scores__grid team-scores__grid--panel" id="teamScoresGrid"></div>
+    </section>
   </main>
 
   <section class="game" id="game" hidden>
@@ -73,9 +89,15 @@
         <img class="hud-ball is-on" data-life="2" src="ball.png" alt="" draggable="false" />
       </div>
     </div>
-    <button type="button" class="quit-x" id="quitBtn" aria-label="Quitter">
-      <span aria-hidden="true">✕</span>
-    </button>
+    <div class="game-top-actions">
+      <button type="button" class="sound-btn sound-btn--game" id="soundBtnGame" aria-label="Son" aria-pressed="true">
+        <span class="sound-btn__on" aria-hidden="true">🔊</span>
+        <span class="sound-btn__off" aria-hidden="true" hidden>🔇</span>
+      </button>
+      <button type="button" class="quit-x" id="quitBtn" aria-label="Quitter">
+        <span aria-hidden="true">✕</span>
+      </button>
+    </div>
     <div class="hud-score" aria-label="Score"><span id="scoreVal">0</span></div>
     <div class="hud-team" id="hudTeam" aria-label="Équipe">
       <span class="flag flag--fr" id="hudTeamFlag" aria-hidden="true"></span>
@@ -193,7 +215,7 @@
     </div>
   </section>
 
-  <script src="app.js?v=86"></script>
+  <script src="app.js?v=100"></script>
   <!-- Logique jeu / hitbox : app.js (pas dans ce fichier HTML) -->
 </body>
 </html>

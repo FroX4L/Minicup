@@ -1,8 +1,14 @@
 const startBtn = document.getElementById("startBtn");
 const teamPickBtn = document.getElementById("teamPickBtn");
+const scoresBtn = document.getElementById("scoresBtn");
+const diffBtn = document.getElementById("diffBtn");
+const diffBtnLabel = document.getElementById("diffBtnLabel");
 const teamsPanel = document.getElementById("teamsPanel");
+const scoresPanel = document.getElementById("scoresPanel");
 const replayBtn = document.getElementById("replayBtn");
 const quitBtn = document.getElementById("quitBtn");
+const soundBtnMenu = document.getElementById("soundBtnMenu");
+const soundBtnGame = document.getElementById("soundBtnGame");
 const menu = document.getElementById("menu");
 const game = document.getElementById("game");
 const loseScreen = document.getElementById("loseScreen");
@@ -61,6 +67,65 @@ const KEEPER_MIN_X = 0.16;
 const KEEPER_MAX_X = 0.84;
 const KEEPER_SPEED_BASE = 0.14;
 const KEEPER_SPEED_PER_GOAL = 0.045;
+
+const DIFF_ORDER = ["easy", "normal", "hard"];
+const DIFF_LABELS = {
+  easy: "Facile",
+  normal: "Normale",
+  hard: "Difficile",
+};
+/** Réglages par difficulté */
+const DIFF = {
+  easy: {
+    keeperMul: 0.55,
+    keeperGoalMul: 0.45,
+    aimPull: 1.55,
+    aimLat: 1.35,
+    keeperMinHits: 3,
+    keeperForgive: 0.62,
+  },
+  normal: {
+    keeperMul: 1,
+    keeperGoalMul: 1,
+    aimPull: 1,
+    aimLat: 1,
+    keeperMinHits: 1,
+    keeperForgive: 0,
+  },
+  hard: {
+    keeperMul: 1.65,
+    keeperGoalMul: 1.5,
+    aimPull: 1,
+    aimLat: 1,
+    keeperMinHits: 1,
+    keeperForgive: 0,
+  },
+};
+
+let difficulty = "normal";
+try {
+  const d = localStorage.getItem("minicup-diff");
+  if (DIFF_ORDER.includes(d)) difficulty = d;
+} catch (_) {}
+
+function diffCfg() {
+  return DIFF[difficulty] || DIFF.normal;
+}
+
+function syncDiffButton() {
+  if (diffBtnLabel) {
+    diffBtnLabel.textContent = `Difficulté : ${DIFF_LABELS[difficulty] || "Normale"}`;
+  }
+}
+
+function cycleDifficulty() {
+  const i = DIFF_ORDER.indexOf(difficulty);
+  difficulty = DIFF_ORDER[(i + 1) % DIFF_ORDER.length];
+  try {
+    localStorage.setItem("minicup-diff", difficulty);
+  } catch (_) {}
+  syncDiffButton();
+}
 const KEEPER_BOB_PX = 3.5;
 const KEEPER_BASE_Y = 10; // descend un peu
 const KEEPER_BOUNCE_MS = 320;
@@ -106,6 +171,9 @@ let prevBgZone = "blue";
 let ignoreFloorUntil = 0;
 let shotPower = 0;
 let throwStartY = 0;
+let throwStartX = 0;
+let throwVx = 0;
+let throwVy = 0;
 let targetZone = ZONE.red;
 let targetMaskX = 48;
 let targetMaskY = 35;
@@ -195,7 +263,9 @@ function updateKeeper(dt) {
     return;
   }
 
-  const speed = KEEPER_SPEED_BASE + goalCount * KEEPER_SPEED_PER_GOAL;
+  const cfg = diffCfg();
+  let speed = (KEEPER_SPEED_BASE * cfg.keeperMul) + goalCount * (KEEPER_SPEED_PER_GOAL * cfg.keeperGoalMul);
+  if (now < keeperBrakeUntil) speed *= 0.22;
   keeperX += keeperDir * speed * dt;
   if (keeperX <= KEEPER_MIN_X) {
     keeperX = KEEPER_MIN_X;
@@ -262,6 +332,7 @@ setInterval(() => {
 function showGameOver() {
   gameOver = true;
   state = "idle";
+  recordTeamScore(score);
   clearTimeout(keeperCelebrateTimer);
   clearTimeout(keeperHeadTimer);
   keeperCelebrating = false;
@@ -285,6 +356,7 @@ function showGameOver() {
   if (ballEl) ballEl.hidden = true;
   if (ghostEl) ghostEl.hidden = true;
   if (loseScreen) loseScreen.hidden = false;
+  playSfx("lose");
 }
 
 function replayGame() {
@@ -304,6 +376,7 @@ function replayGame() {
 
 function quitToMenu() {
   gameOver = false;
+  recordTeamScore(score);
   clearInterval(keeperWinTimer);
   keeperWinTimer = null;
   clearTimeout(keeperCelebrateTimer);
@@ -311,6 +384,7 @@ function quitToMenu() {
   keeperCelebrating = false;
   if (loseScreen) loseScreen.hidden = true;
   if (teamsPanel) teamsPanel.hidden = true;
+  if (scoresPanel) scoresPanel.hidden = true;
   if (ballEl) {
     ballEl.hidden = false;
     ballEl.style.opacity = "1";
@@ -328,12 +402,172 @@ function quitToMenu() {
 
 function bindPress(btn) {
   if (!btn) return;
-  btn.addEventListener("pointerdown", () => btn.classList.add("is-pressed"));
+  btn.addEventListener("pointerdown", () => {
+    btn.classList.add("is-pressed");
+    playUiClick();
+  });
   btn.addEventListener("pointerup", () => btn.classList.remove("is-pressed"));
   btn.addEventListener("pointerleave", () => btn.classList.remove("is-pressed"));
 }
 
+let soundOn = true;
+try {
+  soundOn = localStorage.getItem("minicup-sound") !== "0";
+} catch (_) {}
+
+const sfx = {
+  kick: new Audio("kick.mp3"),
+  filet: new Audio("filet.mp3"),
+  lose: new Audio("lose.mp3"),
+  stop: new Audio("stop.mp3"),
+  win1: new Audio("win1.mp3"),
+  win2: new Audio("win2.mp3"),
+  win3: new Audio("win3.mp3"),
+  win4: new Audio("win4.mp3"),
+  metal1: new Audio("metal1.mp3"),
+  metal2: new Audio("metal2.mp3"),
+};
+Object.values(sfx).forEach((a) => {
+  a.preload = "auto";
+  a.volume = 0.85;
+});
+sfx.win1.volume = 0.38;
+sfx.win2.volume = 0.38;
+sfx.win3.volume = 0.38;
+sfx.win4.volume = 0.38;
+
+function playSfx(name) {
+  if (!soundOn) return;
+  const a = sfx[name];
+  if (!a) return;
+  try {
+    a.currentTime = 0;
+    const p = a.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch (_) {}
+}
+
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+/** Clic UI basique (synthèse) */
+function playUiClick() {
+  if (!soundOn) return;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  try {
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(720, t);
+    osc.frequency.exponentialRampToValueAtTime(280, t + 0.045);
+    gain.gain.setValueAtTime(0.14, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.055);
+  } catch (_) {}
+}
+
+function syncSoundButtons() {
+  [soundBtnMenu, soundBtnGame].forEach((btn) => {
+    if (!btn) return;
+    btn.classList.toggle("is-muted", !soundOn);
+    btn.setAttribute("aria-pressed", soundOn ? "true" : "false");
+    btn.setAttribute("aria-label", soundOn ? "Couper le son" : "Activer le son");
+    const on = btn.querySelector(".sound-btn__on");
+    const off = btn.querySelector(".sound-btn__off");
+    if (on) on.hidden = !soundOn;
+    if (off) off.hidden = soundOn;
+  });
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  try {
+    localStorage.setItem("minicup-sound", soundOn ? "1" : "0");
+  } catch (_) {}
+  syncSoundButtons();
+}
+
+syncSoundButtons();
+[soundBtnMenu, soundBtnGame].forEach((btn) => {
+  if (!btn) return;
+  bindPress(btn);
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleSound();
+  });
+});
+
 let selectedTeam = "fr";
+
+const TEAM_IDS = ["fr", "ma", "es", "ar", "dz", "it", "us", "en", "no"];
+const TEAM_SCORES_KEY = "minicup-team-scores";
+
+function loadTeamScores() {
+  try {
+    const raw = localStorage.getItem(TEAM_SCORES_KEY);
+    if (!raw) return {};
+    const data = JSON.parse(raw);
+    return data && typeof data === "object" ? data : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveTeamScores(data) {
+  try {
+    localStorage.setItem(TEAM_SCORES_KEY, JSON.stringify(data));
+  } catch (_) {}
+}
+
+let teamBestScores = loadTeamScores();
+
+function getTeamBest(id) {
+  const n = Number(teamBestScores[id]);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function recordTeamScore(value) {
+  const id = selectedTeam || "fr";
+  const v = Math.max(0, Math.floor(value || 0));
+  if (v <= getTeamBest(id)) return false;
+  teamBestScores[id] = v;
+  saveTeamScores(teamBestScores);
+  renderTeamScores();
+  return true;
+}
+
+function renderTeamScores() {
+  const grid = document.getElementById("teamScoresGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  TEAM_IDS.forEach((id) => {
+    const row = document.createElement("div");
+    row.className = "team-score" + (id === selectedTeam ? " is-current" : "");
+    row.dataset.team = id;
+    const flag = document.createElement("span");
+    flag.className = `flag flag--${id}`;
+    flag.setAttribute("aria-hidden", "true");
+    const val = document.createElement("span");
+    val.className = "team-score__val";
+    val.textContent = String(getTeamBest(id));
+    row.appendChild(flag);
+    row.appendChild(val);
+    grid.appendChild(row);
+  });
+}
 
 function updateHudTeamFlag() {
   if (!hudTeamFlag) return;
@@ -349,13 +583,26 @@ function selectTeam(btn) {
   btn.classList.add("is-selected");
   btn.setAttribute("aria-selected", "true");
   selectedTeam = btn.dataset.team || "fr";
+  try {
+    localStorage.setItem("minicup-team", selectedTeam);
+  } catch (_) {}
   updateHudTeamFlag();
+  renderTeamScores();
   if (teamsPanel) teamsPanel.hidden = true;
+  if (scoresPanel) scoresPanel.hidden = true;
 }
 
 function toggleTeamsPanel() {
   if (!teamsPanel) return;
+  if (scoresPanel) scoresPanel.hidden = true;
   teamsPanel.hidden = !teamsPanel.hidden;
+}
+
+function toggleScoresPanel() {
+  if (!scoresPanel) return;
+  if (teamsPanel) teamsPanel.hidden = true;
+  if (scoresPanel.hidden) renderTeamScores();
+  scoresPanel.hidden = !scoresPanel.hidden;
 }
 
 const teamGrid = document.getElementById("teamGrid");
@@ -366,13 +613,42 @@ if (teamGrid) {
   });
 }
 
+try {
+  const savedTeam = localStorage.getItem("minicup-team");
+  if (savedTeam && TEAM_IDS.includes(savedTeam)) {
+    selectedTeam = savedTeam;
+    const btn = teamGrid && teamGrid.querySelector(`.team[data-team="${savedTeam}"]`);
+    if (btn) {
+      teamGrid.querySelectorAll(".team").forEach((el) => {
+        el.classList.remove("is-selected");
+        el.setAttribute("aria-selected", "false");
+      });
+      btn.classList.add("is-selected");
+      btn.setAttribute("aria-selected", "true");
+    }
+  }
+} catch (_) {}
+renderTeamScores();
+updateHudTeamFlag();
+
 bindPress(startBtn);
+bindPress(diffBtn);
 bindPress(teamPickBtn);
+bindPress(scoresBtn);
 bindPress(replayBtn);
 bindPress(quitBtn);
 
+syncDiffButton();
+if (diffBtn) {
+  diffBtn.addEventListener("click", () => cycleDifficulty());
+}
+
 if (teamPickBtn) {
   teamPickBtn.addEventListener("click", () => toggleTeamsPanel());
+}
+
+if (scoresBtn) {
+  scoresBtn.addEventListener("click", () => toggleScoresPanel());
 }
 
 if (teamsPanel) {
@@ -381,8 +657,15 @@ if (teamsPanel) {
   });
 }
 
+if (scoresPanel) {
+  scoresPanel.addEventListener("click", (e) => {
+    if (e.target === scoresPanel) scoresPanel.hidden = true;
+  });
+}
+
 startBtn.addEventListener("click", () => {
   if (teamsPanel) teamsPanel.hidden = true;
+  if (scoresPanel) scoresPanel.hidden = true;
   menu.hidden = true;
   game.hidden = false;
   updateHudTeamFlag();
@@ -520,6 +803,7 @@ function addScore() {
   score += 1;
   goalCount += 1;
   updateHud();
+  recordTeamScore(score);
 }
 
 function stopOnGoal(zone) {
@@ -529,7 +813,9 @@ function stopOnGoal(zone) {
   showGoalMarker();
   playKeeperAnxiousHead();
   frenzyPions();
-  beginGroundBounce(true);
+  playSfx("filet");
+  playSfx(`win${1 + Math.floor(Math.random() * 4)}`);
+  beginGroundBounce(true, true);
 }
 
 const PION_FRENZY_RATE = 4.2;
@@ -538,6 +824,26 @@ let pionRaf = 0;
 let pionLast = 0;
 /** @type {{ el: HTMLElement, phase: number, period: number, amp: number }[]} */
 const pionData = [];
+let crowdHelpUsed = false;
+let crowdHelpLockShots = 0;
+let crowdHelpBlockedShot = false;
+let keeperBrakeUntil = 0;
+
+function tryCrowdHelp(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  if (state !== "flying" || crowdHelpUsed || crowdHelpBlockedShot || gameOver) return;
+  crowdHelpUsed = true;
+  crowdHelpLockShots = 2; // bloqué pendant les 2 prochains tirs
+  playUiClick();
+  // ~1 fois sur 10
+  if (Math.random() >= 0.1) return;
+  bounceCage();
+  keeperBrakeUntil = performance.now() + 1100;
+  frenzyPions();
+}
 
 function buildPions() {
   const wrap = document.getElementById("pionsEl") || document.querySelector(".pions");
@@ -559,6 +865,7 @@ function buildPions() {
     const amp = -(7 + Math.floor(Math.random() * 9));
     const x = (4 + Math.random() * 92).toFixed(2);
     img.style.setProperty("--x", `${x}%`);
+    img.addEventListener("pointerdown", tryCrowdHelp);
     wrap.appendChild(img);
     pionData.push({
       el: img,
@@ -598,6 +905,7 @@ function frenzyPions() {
 function stopOnGreen() {
   setBallRing(false);
   bounceCage();
+  playSfx(Math.random() < 0.5 ? "metal1" : "metal2");
   loseLife();
   beginGroundBounce(true);
 }
@@ -605,6 +913,7 @@ function stopOnGreen() {
 function stopOnKeeper() {
   setBallRing(false);
   playKeeperSaveAnim();
+  playSfx("stop");
   loseLife();
   beginGroundBounce(true);
 }
@@ -706,8 +1015,8 @@ function hideGhost() {
   ghostEl.classList.remove("is-flying");
 }
 
-/** Fantôme : saut + sol 1s ; balle joueur revient à 0.3s */
-function beginGroundBounce(fromCage) {
+/** Fantôme : saut + sol 1s ; balle joueur revient (immédiat si but) */
+function beginGroundBounce(fromCage, recoverNow = false) {
   if (gameOver) return;
   gx = x;
   gy = y;
@@ -728,7 +1037,12 @@ function beginGroundBounce(fromCage) {
   state = "reset";
   vx = 0;
   vy = 0;
-  scheduleRecover();
+  if (recoverNow) {
+    clearTimeout(recoverTimer);
+    resetBall(false);
+  } else {
+    scheduleRecover();
+  }
 }
 
 function updateGhostBounce(dt, now) {
@@ -972,7 +1286,13 @@ function probeKeeperAtScreen(cx, cy) {
     const my = Math.floor(((py - rect.top) / rect.height) * mh);
     if (keeperAlphaAt(mx, my, bodyMask) || keeperAlphaAt(mx, my, keeperHeadMask)) hits++;
   }
-  return hits >= 1;
+  const cfg = diffCfg();
+  if (hits < cfg.keeperMinHits) return false;
+  // Facile : contact léger parfois ignoré → ça peut rentrer quand même
+  if (cfg.keeperForgive > 0 && hits <= 2 && Math.random() < cfg.keeperForgive) {
+    return false;
+  }
+  return true;
 }
 
 function probeKeeperSwept() {
@@ -1099,11 +1419,12 @@ function resolveHits() {
   prevBgZone = bgZone;
 }
 
-/** Guide vers une cellule RANDOM — violet traverse rouge/bleu jusqu’au haut */
+/** Guide vers une cellule — tir diagonal = peu / pas d’aimant X vers la cage */
 function applyPowerAim(dt) {
   const g = game.getBoundingClientRect();
   const cage = hitboxCageImg.getBoundingClientRect();
   if (cage.height < 2) return;
+  const cfg = diffCfg();
 
   const targetX = (cage.left - g.left) + ((targetMaskX + 0.5) / CAGE_MASK_W) * cage.width;
   const targetY = (cage.top - g.top) + ((targetMaskY + 0.5) / CAGE_MASK_H) * cage.height;
@@ -1111,19 +1432,26 @@ function applyPowerAim(dt) {
   const denom = Math.max(40, throwStartY - targetY);
   const progress = clamp((throwStartY - y) / denom, 0, 1);
   const boost = targetZone === ZONE.violet ? 1.15 : targetZone === ZONE.blue ? 0.85 : 0.65;
-  const pullY = (0.04 + progress * progress * (0.35 + shotPower * 0.45)) * boost;
+  const pullY = (0.04 + progress * progress * (0.35 + shotPower * 0.45)) * boost * cfg.aimPull;
   const spinAmt = Math.abs(clamp(flightSpin, -CURVE_SPIN_MAX, CURVE_SPIN_MAX));
-  // moins de correction X si effet : laisse l’arc se former
-  const pullX = (0.03 + progress * progress * 0.28) * (0.5 + shotPower * 0.3) * (1 - Math.min(0.45, spinAmt * 0.1));
+  const pullX = (0.03 + progress * progress * 0.28) * (0.5 + shotPower * 0.3) * (1 - Math.min(0.45, spinAmt * 0.1)) * cfg.aimPull;
 
-  x += (targetX - x) * Math.min(1, pullX * dt * 6);
-  y += (targetY - y) * Math.min(1, pullY * dt * (7 + shotPower * 6));
+  // part latérale du lancer (0 = droit, 1 = très diagonal)
+  const lat = Math.abs(throwVx) / (Math.abs(throwVx) + Math.abs(throwVy) + 1);
+  const latScale = 2.1 / Math.max(0.35, cfg.aimLat);
+  const cageMagnetX = 1 - clamp(lat * latScale, 0, 0.95);
+  // trajectoire naturelle en X selon l’angle de tir
+  const naturalX = throwStartX + throwVx * ((throwStartY - y) / Math.max(40, -throwVy));
+  const aimX = targetX * cageMagnetX + naturalX * (1 - cageMagnetX);
 
-  // force la montée jusqu’au violet (ne s’arrête pas dans le bleu)
-  if (targetZone === ZONE.violet && y > targetY + 4) {
+  x += (aimX - x) * Math.min(1, pullX * dt * 6) * cageMagnetX;
+  y += (targetY - y) * Math.min(1, pullY * dt * (7 + shotPower * 6) * (1 - lat * 0.35));
+
+  const latGate = difficulty === "easy" ? 0.55 : 0.45;
+  if (targetZone === ZONE.violet && y > targetY + 4 && lat < latGate) {
     const catchUp = (y - targetY) * 1.1;
     vy = Math.min(vy, -60 - catchUp - shotPower * 120);
-  } else if (targetZone === ZONE.blue && y > targetY + 6) {
+  } else if (targetZone === ZONE.blue && y > targetY + 6 && lat < latGate) {
     vy = Math.min(vy, -45 - shotPower * 80);
   }
 }
@@ -1222,6 +1550,9 @@ function endAim(e) {
   targetMaskX = cell.mx;
   targetMaskY = cell.my;
   throwStartY = y;
+  throwStartX = x;
+  throwVx = vx;
+  throwVy = vy;
 
   floorBounceLock = false;
   leftGround = false;
@@ -1234,11 +1565,16 @@ function endAim(e) {
     flightSpin = sign * (Math.abs(rawSpin) - CURVE_DEADZONE);
   }
   spinVel = 0;
+  crowdHelpUsed = false;
+  crowdHelpBlockedShot = crowdHelpLockShots > 0;
+  if (crowdHelpBlockedShot) crowdHelpLockShots -= 1;
+  keeperBrakeUntil = 0;
   render();
   prevBgZone = probeBgZone();
   state = "flying";
   setBallRing(false);
   ballEl.classList.add("is-flying");
+  playSfx("kick");
 }
 
 game.addEventListener("pointerup", endAim);
