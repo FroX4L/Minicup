@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=97" />
+  <link rel="stylesheet" href="styles.css?v=99" />
 </head>
 <body>
   <main class="screen" id="menu">
@@ -222,12 +222,18 @@
     </div>
   </section>
 
-  <script src="app.js?v=114"></script>
+  <script src="app.js?v=116"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("./sw.js").catch(() => {});
       });
+      // Après un push : bascule propre sur le nouveau SW (1 reload max)
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          window.location.reload();
+        });
+      }
     }
   </script>
   <!-- Logique jeu / hitbox : app.js (pas dans ce fichier HTML) -->

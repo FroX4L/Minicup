@@ -367,6 +367,11 @@ function bounceKeeperLaugh() {
   bounceKeeperPart(keeperBodyEl, "is-body-bounce");
 }
 
+function bounceKeeperSoft() {
+  bounceKeeperPart(keeperHeadEl, "is-head-bounce-soft");
+  bounceKeeperPart(keeperBodyEl, "is-body-bounce-soft");
+}
+
 function setKeeperHead(src) {
   if (!keeperHeadEl) return;
   if (keeperHeadEl.getAttribute("src") !== src) {
@@ -403,7 +408,7 @@ function playKeeperAnxiousHead(ms = KEEPER_ANXIOUS_MS) {
 }
 
 setInterval(() => {
-  if (!keeperBodyEl || keeperCelebrating || keeperLaughing || gameOver) return;
+  if (!keeperBodyEl || game.hidden || keeperCelebrating || keeperLaughing || gameOver) return;
   keeperFrame = 1 - keeperFrame;
   keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
 }, KEEPER_FRAME_MS);
@@ -445,36 +450,64 @@ function startLoseSequence() {
   hideGhost();
   if (loseScreen) loseScreen.hidden = true;
 
-  // Gardien qui se moque : laugh1/2 puis après 1s laugh3/4 + bounce tête+bas
+  // Pose pendant le récap selon le score
   keeperLaughing = true;
   laughHeadFrame = 0;
-  let laughPair = KEEPER_HEAD_LAUGH_A;
-  playSfx("laugh");
-  if (keeperBodyEl) keeperBodyEl.src = KEEPER_LAUGH;
-  if (keeperHeadEl) {
-    keeperHeadEl.src = laughPair[0];
-    bounceKeeperLaugh();
-  }
   const fx = keeperFlipScaleX();
   if (keeperEl) {
     keeperEl.style.left = `${keeperX * 100}%`;
     keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
   }
-  keeperLaughPhaseTimer = setTimeout(() => {
-    if (!keeperLaughing) return;
-    laughPair = KEEPER_HEAD_LAUGH_B;
-    laughHeadFrame = 0;
+
+  if (score >= 20) {
+    // Gros score : Goal_hit + tête anxious, bounce léger
+    if (keeperBodyEl) keeperBodyEl.src = KEEPER_HIT;
+    if (keeperHeadEl) {
+      keeperHeadEl.src = KEEPER_HEAD_ANXIOUS;
+      bounceKeeperSoft();
+    }
+    keeperLaughTimer = setInterval(() => {
+      if (!keeperLaughing) return;
+      bounceKeeperSoft();
+    }, 320);
+  } else if (score >= 10) {
+    // Bon score : win + souriant (pas de laugh)
+    if (keeperBodyEl) keeperBodyEl.src = KEEPER_WIN[0];
+    if (keeperHeadEl) {
+      keeperHeadEl.src = KEEPER_HEAD_SMILE;
+      bounceKeeperHead();
+    }
+    keeperLaughTimer = setInterval(() => {
+      if (!keeperLaughing || !keeperBodyEl) return;
+      laughHeadFrame = 1 - laughHeadFrame;
+      keeperBodyEl.src = KEEPER_WIN[laughHeadFrame];
+      bounceKeeperPart(keeperBodyEl, "is-body-bounce");
+    }, KEEPER_WIN_MS);
+  } else {
+    // Moins de 10 : se moque (laugh1/2 puis laugh3/4)
+    let laughPair = KEEPER_HEAD_LAUGH_A;
+    playSfx("laugh");
+    if (keeperBodyEl) keeperBodyEl.src = KEEPER_LAUGH;
     if (keeperHeadEl) {
       keeperHeadEl.src = laughPair[0];
       bounceKeeperLaugh();
     }
-  }, LAUGH_PHASE_SWITCH_MS);
-  keeperLaughTimer = setInterval(() => {
-    if (!keeperLaughing || !keeperHeadEl) return;
-    laughHeadFrame = 1 - laughHeadFrame;
-    keeperHeadEl.src = laughPair[laughHeadFrame];
-    bounceKeeperLaugh();
-  }, 220);
+    keeperLaughPhaseTimer = setTimeout(() => {
+      if (!keeperLaughing) return;
+      laughPair = KEEPER_HEAD_LAUGH_B;
+      laughHeadFrame = 0;
+      if (keeperHeadEl) {
+        keeperHeadEl.src = laughPair[0];
+        bounceKeeperLaugh();
+      }
+    }, LAUGH_PHASE_SWITCH_MS);
+    keeperLaughTimer = setInterval(() => {
+      if (!keeperLaughing || !keeperHeadEl) return;
+      laughHeadFrame = 1 - laughHeadFrame;
+      keeperHeadEl.src = laughPair[laughHeadFrame];
+      bounceKeeperLaugh();
+    }, 220);
+  }
 
   const wrap = document.querySelector(".cage-wrap");
   clearGoalRecapDots();
@@ -648,7 +681,7 @@ const sfx = {
   metal2: new Audio("metal2.mp3"),
 };
 Object.values(sfx).forEach((a) => {
-  a.preload = "auto";
+  a.preload = "metadata";
   a.volume = 0.85;
 });
 sfx.win1.volume = 0.38;
@@ -1009,12 +1042,7 @@ function stopOnGoal(zone) {
   beginGroundBounce(true, true);
 }
 
-const PION_FRENZY_RATE = 4.2;
-let pionRate = 1;
-let pionRaf = 0;
-let pionLast = 0;
-/** @type {{ el: HTMLElement, phase: number, period: number, amp: number }[]} */
-const pionData = [];
+let pionWrapEl = null;
 let crowdHelpUsed = false;
 let keeperBrakeUntil = 0;
 
@@ -1042,13 +1070,13 @@ function tryCrowdHelp(e) {
 function buildPions() {
   const wrap = document.getElementById("pionsEl") || document.querySelector(".pions");
   if (!wrap) return;
+  pionWrapEl = wrap;
   const srcs = [
     "pion_01.png", "pion_02.png", "pion_03.png",
     "pion_04.png", "pion_05.png", "pion_06.png",
   ];
   wrap.innerHTML = "";
-  pionData.length = 0;
-  const count = 48;
+  const count = 32;
   for (let i = 0; i < count; i++) {
     const img = document.createElement("img");
     img.className = "pion";
@@ -1059,40 +1087,20 @@ function buildPions() {
     const amp = -(7 + Math.floor(Math.random() * 9));
     const x = (4 + Math.random() * 92).toFixed(2);
     img.style.setProperty("--x", `${x}%`);
+    img.style.setProperty("--period", `${period.toFixed(2)}s`);
+    img.style.setProperty("--amp", `${amp}px`);
+    img.style.setProperty("--delay", `${(-Math.random() * period).toFixed(2)}s`);
     img.addEventListener("pointerdown", tryCrowdHelp);
     wrap.appendChild(img);
-    pionData.push({
-      el: img,
-      phase: Math.random() * Math.PI * 2,
-      period,
-      amp,
-    });
   }
-  startPionBounce();
-}
-
-function startPionBounce() {
-  cancelAnimationFrame(pionRaf);
-  pionLast = performance.now();
-  const tick = (now) => {
-    const dt = Math.min(0.05, (now - pionLast) / 1000);
-    pionLast = now;
-    for (let i = 0; i < pionData.length; i++) {
-      const p = pionData[i];
-      p.phase += (Math.PI * dt * pionRate) / p.period;
-      const y = p.amp * (0.5 - 0.5 * Math.cos(p.phase));
-      p.el.style.transform = `translateX(-50%) translateY(${y}px)`;
-    }
-    pionRaf = requestAnimationFrame(tick);
-  };
-  pionRaf = requestAnimationFrame(tick);
 }
 
 function frenzyPions() {
-  pionRate = PION_FRENZY_RATE;
+  if (!pionWrapEl) return;
+  pionWrapEl.classList.add("is-frenzy");
   clearTimeout(frenzyPions._t);
   frenzyPions._t = setTimeout(() => {
-    pionRate = 1;
+    if (pionWrapEl) pionWrapEl.classList.remove("is-frenzy");
   }, 500);
 }
 
@@ -1310,6 +1318,16 @@ function render() {
   patternEl.style.transform = `translate(calc(-50% + ${patX}px), calc(-50% + ${patY}px))`;
 }
 
+/** Rects layout figés 1×/frame — évite le thrashing pendant les sous-pas */
+const hitRects = { game: null, cage: null, bg: null, keeper: null };
+
+function syncHitRects() {
+  hitRects.game = game.getBoundingClientRect();
+  hitRects.cage = hitboxCageImg.getBoundingClientRect();
+  hitRects.bg = hitboxBgImg.getBoundingClientRect();
+  hitRects.keeper = keeperEl ? keeperEl.getBoundingClientRect() : null;
+}
+
 function setBallRing(on) {
   ballEl.classList.toggle("show-ring", on);
 }
@@ -1388,7 +1406,7 @@ function zoneName(id) {
 
 /** Collision : petit carré ~10x10 au centre — ne compte QUE la zone voulue (passe rouge/bleu pour aller au violet) */
 function probeCageAtScreen(cx, cy) {
-  const cage = hitboxCageImg.getBoundingClientRect();
+  const cage = hitRects.cage || hitboxCageImg.getBoundingClientRect();
   if (cage.width < 2 || cage.height < 2) return "other";
 
   const half = BALL_HIT * 0.5;
@@ -1422,15 +1440,15 @@ function probeCageAtScreen(cx, cy) {
 }
 
 function probeCageZone() {
-  const ball = ballEl.getBoundingClientRect();
-  return probeCageAtScreen(ball.left + ball.width / 2, ball.top + ball.height / 2);
+  const g = hitRects.game || game.getBoundingClientRect();
+  return probeCageAtScreen(g.left + x, g.top + y);
 }
 
 /** Balayage prev→current pour ne pas sauter la zone à haute vitesse */
 function probeCageSwept() {
-  const g = game.getBoundingClientRect();
+  const g = hitRects.game || game.getBoundingClientRect();
   const dist = Math.hypot(x - prevX, y - prevY);
-  const steps = Math.max(1, Math.ceil(dist / 4));
+  const steps = Math.max(1, Math.ceil(dist / 5));
   let found = "other";
   const wanted = zoneName(targetZone);
   for (let i = 0; i <= steps; i++) {
@@ -1457,8 +1475,8 @@ function keeperAlphaAt(mx, my, mask) {
 }
 
 function probeKeeperAtScreen(cx, cy) {
-  const rect = keeperEl.getBoundingClientRect();
-  if (rect.width < 2 || rect.height < 2) return false;
+  const rect = hitRects.keeper || (keeperEl && keeperEl.getBoundingClientRect());
+  if (!rect || rect.width < 2 || rect.height < 2) return false;
   const half = BALL_HIT * 0.5;
   const offsets = [
     [0, 0],
@@ -1490,9 +1508,9 @@ function probeKeeperAtScreen(cx, cy) {
 }
 
 function probeKeeperSwept() {
-  const g = game.getBoundingClientRect();
+  const g = hitRects.game || game.getBoundingClientRect();
   const dist = Math.hypot(x - prevX, y - prevY);
-  const steps = Math.max(1, Math.ceil(dist / 4));
+  const steps = Math.max(1, Math.ceil(dist / 5));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const sx = prevX + (x - prevX) * t;
@@ -1503,8 +1521,8 @@ function probeKeeperSwept() {
 }
 
 function probeBgZone() {
-  const g = game.getBoundingClientRect();
-  const bg = hitboxBgImg.getBoundingClientRect();
+  const g = hitRects.game || game.getBoundingClientRect();
+  const bg = hitRects.bg || hitboxBgImg.getBoundingClientRect();
   const cy = g.top + y;
   if (bg.height < 2) return "other";
   const t = (cy - bg.top) / bg.height;
@@ -1520,6 +1538,7 @@ function bounceCage() {
 }
 
 function showGoalMarker() {
+  render();
   const ball = ballEl.getBoundingClientRect();
   const wrap = document.querySelector(".cage-wrap").getBoundingClientRect();
   const size = Math.max(36, ball.width * 1.05);
@@ -1618,8 +1637,8 @@ function resolveHits() {
 
 /** Guide vers une cellule — tir diagonal = peu / pas d’aimant X vers la cage */
 function applyPowerAim(dt) {
-  const g = game.getBoundingClientRect();
-  const cage = hitboxCageImg.getBoundingClientRect();
+  const g = hitRects.game || game.getBoundingClientRect();
+  const cage = hitRects.cage || hitboxCageImg.getBoundingClientRect();
   if (cage.height < 2) return;
   const cfg = diffCfg();
 
@@ -1800,6 +1819,7 @@ function loop(now) {
     const speedNow = Math.hypot(vx, vy);
     const steps = Math.max(1, Math.ceil((speedNow * dt) / 18));
     const sdt = dt / steps;
+    syncHitRects();
     for (let s = 0; s < steps; s++) {
       vx *= Math.pow(DRAG, sdt * 60);
       vy *= Math.pow(DRAG, sdt * 60);
@@ -1821,7 +1841,6 @@ function loop(now) {
       applyPowerAim(sdt);
       patX = wrapMesh(patX + vx * FLIGHT_ROLL * sdt);
       patY = wrapMesh(patY + vy * FLIGHT_ROLL * sdt);
-      render();
       if (isPastSideLimit()) {
         beginSideExit();
         break;
@@ -1831,6 +1850,7 @@ function loop(now) {
       prevX = x;
       prevY = y;
     }
+    render();
 
     if (state === "flying") {
       const w = game.clientWidth;

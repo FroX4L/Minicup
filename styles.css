@@ -809,6 +809,11 @@ body {
   z-index: 3;
   pointer-events: none;
   overflow: visible;
+  --pion-speed: 1;
+}
+
+.pions.is-frenzy {
+  --pion-speed: 4.2;
 }
 
 .pion {
@@ -825,8 +830,19 @@ body {
   user-select: none;
   pointer-events: auto;
   cursor: pointer;
-  will-change: transform;
   -webkit-tap-highlight-color: transparent;
+  animation: pion-bob calc(var(--period, 0.5s) / var(--pion-speed, 1)) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes pion-bob {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(var(--amp, -8px));
+  }
 }
 
 .tribune-01 {
@@ -907,6 +923,14 @@ body {
   animation: keeper-body-bounce 0.28s ease-out;
 }
 
+.keeper__head.is-head-bounce-soft {
+  animation: keeper-head-bounce-soft 0.4s ease-out;
+}
+
+.keeper__body.is-body-bounce-soft {
+  animation: keeper-body-bounce-soft 0.4s ease-out;
+}
+
 @keyframes keeper-head-bounce {
   0% { transform: scale(1); }
   35% { transform: scale(1.1, 0.92); }
@@ -918,6 +942,18 @@ body {
   0% { transform: scale(1) translateY(0); }
   35% { transform: scale(1.06, 0.94) translateY(2px); }
   65% { transform: scale(0.98, 1.04) translateY(-2px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+@keyframes keeper-head-bounce-soft {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.03, 0.98); }
+  100% { transform: scale(1); }
+}
+
+@keyframes keeper-body-bounce-soft {
+  0% { transform: scale(1) translateY(0); }
+  40% { transform: scale(1.015, 0.99) translateY(1px); }
   100% { transform: scale(1) translateY(0); }
 }
 

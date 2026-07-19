@@ -1,13 +1,7 @@
-const CACHE = "minicup-offline-v8";
+const CACHE = "minicup-offline-v9";
 
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./app.js",
-  "./app.js?v=114",
-  "./styles.css",
-  "./styles.css?v=97",
-  "./manifest.webmanifest",
+/** Images / sons stables — pas le JS/CSS versionnés (réseau d'abord) */
+const PRECACHE = [
   "./ball.png",
   "./bg.png",
   "./cage.png",
@@ -45,23 +39,39 @@ const ASSETS = [
   "./win2.mp3",
   "./win3.mp3",
   "./win4.mp3",
+  "./manifest.webmanifest",
 ];
+
+function isFreshCode(url) {
+  const p = url.pathname;
+  return (
+    p.endsWith("/") ||
+    p.endsWith(".html") ||
+    p.endsWith(".js") ||
+    p.endsWith(".css") ||
+    p.endsWith("sw.js")
+  );
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) =>
-      Promise.all(
-        ASSETS.map((url) => cache.add(url).catch(() => {}))
+    caches
+      .open(CACHE)
+      .then((cache) =>
+        Promise.all(PRECACHE.map((url) => cache.add(url).catch(() => {})))
       )
-    ).then(() => self.skipWaiting())
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      )
+      .then(() => self.clients.claim())
   );
 });
 
@@ -70,37 +80,38 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
 
-  // Navigations : réseau d’abord, sinon cache
-  if (req.mode === "navigate") {
+  // HTML / JS / CSS : réseau d'abord (évite le lag / vieux code après un push)
+  if (req.mode === "navigate" || isFreshCode(url)) {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put("./index.html", copy));
-          return res;
-        })
-        .catch(() =>
-          caches.match("./index.html").then((r) => r || caches.match("./"))
-        )
-    );
-    return;
-  }
-
-  // Assets locaux / polices : cache d’abord, sinon réseau puis mise en cache
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req)
-        .then((res) => {
-          if (!res || res.status !== 200) return res;
-          if (url.origin === self.location.origin || url.hostname.includes("fonts.g")) {
+          if (res && res.ok) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(req, copy));
           }
           return res;
         })
+        .catch(() =>
+          caches.match(req).then((r) => r || caches.match("./index.html"))
+        )
+    );
+    return;
+  }
+
+  // Images / sons : cache d'abord, refresh en arrière-plan
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      const fetched = fetch(req)
+        .then((res) => {
+          if (res && res.ok) {
+            caches.open(CACHE).then((c) => c.put(req, res.clone()));
+          }
+          return res;
+        })
         .catch(() => cached);
+      return cached || fetched;
     })
   );
 });
