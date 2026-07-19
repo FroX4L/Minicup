@@ -259,7 +259,7 @@ body {
   top: 38%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(88%, 340px);
+  width: min(96%, 400px);
   z-index: 2;
   pointer-events: none;
 }

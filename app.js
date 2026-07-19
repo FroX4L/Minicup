@@ -14,12 +14,12 @@ const hitboxCageImg = document.getElementById("hitboxCage");
 
 const BALL_SIZE = 118;
 const SCALE_NEAR = 1;
-const SCALE_FAR = 0.26;
+const SCALE_FAR = 0.42;
 const DRAG = 0.994;
 const MIN_SPEED = 90;
 const MAX_SPEED = 2200;
-const FLIGHT_MIN = 110;
-const FLIGHT_MAX = 480;
+const FLIGHT_MIN = 45;
+const FLIGHT_MAX = 360;
 const POWER_SPAN = 1700;
 const MESH_TILE = 46;
 const RESET_DELAY = 900;
@@ -31,14 +31,17 @@ const BALL_HIT = 10;
 const RECOVER_DELAY = 300;
 const BOUNCE_LIFE = 1000;
 const KEEPER_FRAMES = ["Gardien_walk1.png", "Gardien_walk2.png"];
-const KEEPER_FRAME_MS = 500;
+const KEEPER_FRAME_MS = 270;
 const KEEPER_MIN_X = 0.16;
 const KEEPER_MAX_X = 0.84;
 const KEEPER_SPEED_BASE = 0.14;
 const KEEPER_SPEED_PER_GOAL = 0.045;
+const KEEPER_BOB_PX = 3.5;
 /** masques alpha dynamiques du gardien (1 par frame) */
 const keeperMasks = [null, null];
 /** bande sol hitbox_bg (bleu), ratios hauteur image */
+/** bande hitbox_bg : rouge=vide, bleu=sol */
+const BG_RED_BOT = 0.225;
 const BG_BLUE_TOP = 0.456;
 const BG_BLUE_BOT = 0.695;
 
@@ -121,10 +124,12 @@ function updateKeeper(dt) {
     keeperDir = -1;
   }
   keeperEl.style.left = `${keeperX * 100}%`;
-  // miroir selon le sens (droite ↔ gauche)
-  keeperEl.style.transform = keeperDir > 0
-    ? "translateX(-50%) scaleX(-1)"
-    : "translateX(-50%)";
+  // bob un peu moins smooth
+  const bobHz = 1000 / KEEPER_FRAME_MS;
+  const s = Math.sin(performance.now() * 0.001 * bobHz * Math.PI * 2);
+  const bobY = Math.sign(s) * Math.pow(Math.abs(s), 0.55) * KEEPER_BOB_PX;
+  const flip = keeperDir > 0 ? " scaleX(-1)" : "";
+  keeperEl.style.transform = `translateX(-50%) translateY(${bobY}px)${flip}`;
 }
 
 setInterval(() => {
@@ -249,6 +254,17 @@ function stopOnMiss() {
 
 /** Sorti sur les côtés */
 function stopOnSideOut() {
+  setBallRing(false);
+  vx = 0;
+  vy = 0;
+  ballEl.classList.remove("is-flying");
+  ballEl.style.opacity = "0";
+  state = "reset";
+  scheduleRecover();
+}
+
+/** Zone rouge hitbox_bg = vide → balle revient */
+function stopOnVoid() {
   setBallRing(false);
   vx = 0;
   vy = 0;
@@ -563,10 +579,10 @@ function probeKeeperSwept() {
 function probeBgZone() {
   const g = game.getBoundingClientRect();
   const bg = hitboxBgImg.getBoundingClientRect();
-  // même centre 10x10 que la cage
   const cy = g.top + y;
   if (bg.height < 2) return "other";
   const t = (cy - bg.top) / bg.height;
+  if (t <= BG_RED_BOT) return "red";
   if (t >= BG_BLUE_TOP && t <= BG_BLUE_BOT) return "blue";
   return "black";
 }
@@ -617,6 +633,14 @@ function bounceFloor() {
 
 function resolveHits() {
   const bgZone = probeBgZone();
+
+  // rouge hitbox_bg = vide → retour joueur
+  if (bgZone === "red") {
+    stopOnVoid();
+    prevBgZone = bgZone;
+    return;
+  }
+
   if (bgZone === "black") leftGround = true;
 
   // gardien d'abord (hitbox = son PNG)
@@ -668,19 +692,19 @@ function applyPowerAim(dt) {
 
   const denom = Math.max(40, throwStartY - targetY);
   const progress = clamp((throwStartY - y) / denom, 0, 1);
-  const boost = targetZone === ZONE.violet ? 2.4 : targetZone === ZONE.blue ? 1.35 : 0.95;
-  const pullY = (0.12 + progress * progress * (1.1 + shotPower * 1.2)) * boost;
-  const pullX = (0.07 + progress * progress * 0.6) * (0.7 + shotPower * 0.4);
+  const boost = targetZone === ZONE.violet ? 1.15 : targetZone === ZONE.blue ? 0.85 : 0.65;
+  const pullY = (0.04 + progress * progress * (0.35 + shotPower * 0.45)) * boost;
+  const pullX = (0.03 + progress * progress * 0.28) * (0.5 + shotPower * 0.3);
 
-  x += (targetX - x) * Math.min(1, pullX * dt * 14);
-  y += (targetY - y) * Math.min(1, pullY * dt * (16 + shotPower * 16));
+  x += (targetX - x) * Math.min(1, pullX * dt * 6);
+  y += (targetY - y) * Math.min(1, pullY * dt * (7 + shotPower * 6));
 
   // force la montée jusqu’au violet (ne s’arrête pas dans le bleu)
   if (targetZone === ZONE.violet && y > targetY + 4) {
-    const catchUp = (y - targetY) * 3.2;
-    vy = Math.min(vy, -180 - catchUp - shotPower * 420);
+    const catchUp = (y - targetY) * 1.1;
+    vy = Math.min(vy, -60 - catchUp - shotPower * 120);
   } else if (targetZone === ZONE.blue && y > targetY + 6) {
-    vy = Math.min(vy, -120 - shotPower * 280);
+    vy = Math.min(vy, -45 - shotPower * 80);
   }
 }
 
@@ -734,16 +758,18 @@ function endAim(e) {
     return;
   }
 
-  // Courbe un peu moins dure pour atteindre le violet
+  // vitesse = lancer, avec plafond
+  vx = rawVx;
+  vy = rawVy;
+  const sp = Math.hypot(vx, vy);
+  if (sp > FLIGHT_MAX) {
+    const k = FLIGHT_MAX / sp;
+    vx *= k;
+    vy *= k;
+  }
+
   const t = clamp((rawSpeed - MIN_SPEED) / POWER_SPAN, 0, 1);
-  const curved = Math.pow(t, 1.65);
-  const flightSpeed = FLIGHT_MIN + curved * (FLIGHT_MAX - FLIGHT_MIN);
-
-  const inv = 1 / rawSpeed;
-  vx = rawVx * inv * flightSpeed;
-  vy = rawVy * inv * flightSpeed;
-
-  shotPower = curved;
+  shotPower = Math.pow(t, 1.65);
   targetZone = zoneFromPower(shotPower);
   const cell = pickRandomCell(targetZone);
   targetMaskX = cell.mx;
