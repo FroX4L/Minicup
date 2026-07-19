@@ -3,24 +3,50 @@ const menu = document.getElementById("menu");
 const game = document.getElementById("game");
 const ballEl = document.getElementById("ball");
 const patternEl = document.getElementById("ballPattern");
+const ghostEl = document.getElementById("ballGhost");
+const ghostPatternEl = document.getElementById("ghostPattern");
 const goalArea = document.getElementById("goalArea");
 const cageEl = document.getElementById("cage");
+const keeperEl = document.getElementById("keeper");
 const goalMarker = document.getElementById("goalMarker");
 const hitboxBgImg = document.getElementById("hitboxBg");
 const hitboxCageImg = document.getElementById("hitboxCage");
 
-const BALL_SIZE = 88;
+const BALL_SIZE = 118;
 const SCALE_NEAR = 1;
-const SCALE_FAR = 0.28;
-const DRAG = 0.992;
-const MIN_SPEED = 40;
-const THROW_GAIN = 2.35;
+const SCALE_FAR = 0.26;
+const DRAG = 0.994;
+const MIN_SPEED = 90;
 const MAX_SPEED = 2200;
+const FLIGHT_MIN = 110;
+const FLIGHT_MAX = 480;
+const POWER_SPAN = 1700;
 const MESH_TILE = 46;
 const RESET_DELAY = 900;
 const ROLL_GAIN = 0.55;
 const FLIGHT_ROLL = 0.085;
-const BOUNCE = 0.62;
+const BOUNCE = 0.34;
+/** hitbox collision balle (centre du ballon blanc) */
+const BALL_HIT = 10;
+const RECOVER_DELAY = 300;
+const BOUNCE_LIFE = 1000;
+const KEEPER_FRAMES = ["Gardien_walk1.png", "Gardien_walk2.png"];
+const KEEPER_FRAME_MS = 500;
+const KEEPER_MIN_X = 0.16;
+const KEEPER_MAX_X = 0.84;
+const KEEPER_SPEED_BASE = 0.14;
+const KEEPER_SPEED_PER_GOAL = 0.045;
+/** masques alpha dynamiques du gardien (1 par frame) */
+const keeperMasks = [null, null];
+/** bande sol hitbox_bg (bleu), ratios hauteur image */
+const BG_BLUE_TOP = 0.456;
+const BG_BLUE_BOT = 0.695;
+
+// Masque hitbox_cage 97x50 : 0=rien, 1=rouge(faible), 2=vert, 3=bleu(moyen), 4=violet(fort)
+const CAGE_MASK_W = 97;
+const CAGE_MASK_H = 50;
+const CAGE_MASK = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000222222222222222222222222222222222222222222222222222222222222222222222222222222222222222200000002222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222200002222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222220000222444444444444444444444444444444444444444444444444444444444444444444444444444444444444444422200022244444444444444444444444444444444444444444444444444444444444444444444444444444444444444442220002244444444444444444444444444444444444444444444444444444444444444444444444444444444444444444222000224444444444444444444444444444444444444444444444444444444444444444444444444444444444444444422200022444444444444444444444444444444444444444444444444444444444444444444444444444444444444444442220002244444444444444444444444444444444444444444444444444444444444444444444444444444444444444444222000224444444444444444444444444444444444444444444444444444444444444444444444444444444444444444422200022444444444444444444444444444444444444444444444444444444444444444444444444444444444444444442220002244444444444444444444444444444444444444444444444444444444444444444444444444444444444444444222000224444444444444444444444444444444444444444444444444444444444444444444444444444444444444444422200022444444444444444444444444444444444444444444444444444444444444444444444444444444444444444442220002244444444444444444444444444444444444444444444444444444444444444444444444444444444444444444222000224444444444444444444444444444444444444444444444444444444444444444444444444444444444444444422200022444444444444444444444444444444444444444444444444444444444444444444444444444444444444444442220002233333333333333333333333333333333333333333333333333333333333333333333333333333333333333333222000223333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322200022333333333333333333333333333333333333333333333333333333333333333333333333333333333333333332220002233333333333333333333333333333333333333333333333333333333333333333333333333333333333333333222000223333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322200022333333333333333333333333333333333333333333333333333333333333333333333333333333333333333332220002233333333333333333333333333333333333333333333333333333333333333333333333333333333333333333222000223333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322200022333333333333333333333333333333333333333333333333333333333333333333333333333333333333333332220002233333333333333333333333333333333333333333333333333333333333333333333333333333333333333333222000223333333333333333333333333333333333333333333333333333333333333333333333333333333333333333322200022333333333333333333333333333333333333333333333333333333333333333333333333333333333333333332220002211111111111111111111111111111111111111111111111111111111111111111111111111111111111111111222000221111111111111111111111111111111111111111111111111111111111111111111111111111111111111111122200022111111111111111111111111111111111111111111111111111111111111111111111111111111111111111112220002211111111111111111111111111111111111111111111111111111111111111111111111111111111111111111222000221111111111111111111111111111111111111111111111111111111111111111111111111111111111111111122200022111111111111111111111111111111111111111111111111111111111111111111111111111111111111111112220000011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111000000001111111111111111111111111111111111111111111111111111111111111111111111111111111111111111100000000111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110000000011111111110000000000000000000000001111111111111111111111111111111111111111111111111111111000000001111111100000000000000000000000000000000000000000000000000000000000000000000000011111111100000000111111000000000000000000000000000000000000000000000000000000000000000000000000000011111110000000011110000000000000000000000000000000000000000000000000000000000000000000000000000000011111000000001100000000000000000000000000000000000000000000000000000000000000000000000000000000000011100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+const ZONE = { none: 0, red: 1, green: 2, blue: 3, violet: 4 };
 
 let state = "idle";
 let x = 0;
@@ -41,53 +67,71 @@ let floorBounceLock = false;
 let leftGround = false;
 let prevBgZone = "blue";
 let ignoreFloorUntil = 0;
+let shotPower = 0;
+let throwStartY = 0;
+let targetZone = ZONE.red;
+let targetMaskX = 48;
+let targetMaskY = 35;
+let zoneCellsCache = {};
+let prevX = 0;
+let prevY = 0;
+let bounceEndAt = 0;
+let recoverTimer = null;
+let ghostActive = false;
+let gx = 0;
+let gy = 0;
+let gvx = 0;
+let gvy = 0;
+let gpatX = 0;
+let gpatY = 0;
+let keeperFrame = 0;
+let keeperX = 0.5;
+let keeperDir = -1;
+let goalCount = 0;
 
-const cageCanvas = document.createElement("canvas");
-const cageCtx = cageCanvas.getContext("2d", { willReadFrequently: true });
-const bgCanvas = document.createElement("canvas");
-const bgCtx = bgCanvas.getContext("2d", { willReadFrequently: true });
-let cagePixels = null;
-let bgPixels = null;
-let cageReady = false;
-let bgReady = false;
-
-function paintHitbox(img, canvas, ctx) {
-  if (!img.naturalWidth) return null;
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(img, 0, 0);
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
-}
-
-function ensureHitboxes() {
-  try {
-    const c = paintHitbox(hitboxCageImg, cageCanvas, cageCtx);
-    if (c) {
-      cagePixels = c;
-      cageReady = true;
+function loadKeeperMask(src, idx) {
+  const img = new Image();
+  img.decoding = "async";
+  img.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    try {
+      keeperMasks[idx] = ctx.getImageData(0, 0, c.width, c.height);
+    } catch (_) {
+      keeperMasks[idx] = { width: c.width, height: c.height, data: null };
     }
-  } catch (e) {
-    console.warn("cage hitbox", e);
-  }
-  try {
-    const b = paintHitbox(hitboxBgImg, bgCanvas, bgCtx);
-    if (b) {
-      bgPixels = b;
-      bgReady = true;
-    }
-  } catch (e) {
-    console.warn("bg hitbox", e);
-  }
+  };
+  img.src = src;
 }
 
-function whenImageReady(img, fn) {
-  if (img.complete && img.naturalWidth) fn();
-  else img.addEventListener("load", fn, { once: true });
+KEEPER_FRAMES.forEach((src, i) => loadKeeperMask(src, i));
+
+function updateKeeper(dt) {
+  if (!keeperEl || game.hidden) return;
+  const speed = KEEPER_SPEED_BASE + goalCount * KEEPER_SPEED_PER_GOAL;
+  keeperX += keeperDir * speed * dt;
+  if (keeperX <= KEEPER_MIN_X) {
+    keeperX = KEEPER_MIN_X;
+    keeperDir = 1;
+  } else if (keeperX >= KEEPER_MAX_X) {
+    keeperX = KEEPER_MAX_X;
+    keeperDir = -1;
+  }
+  keeperEl.style.left = `${keeperX * 100}%`;
+  // miroir selon le sens (droite ↔ gauche)
+  keeperEl.style.transform = keeperDir > 0
+    ? "translateX(-50%) scaleX(-1)"
+    : "translateX(-50%)";
 }
 
-whenImageReady(hitboxCageImg, ensureHitboxes);
-whenImageReady(hitboxBgImg, ensureHitboxes);
+setInterval(() => {
+  if (!keeperEl) return;
+  keeperFrame = 1 - keeperFrame;
+  keeperEl.src = KEEPER_FRAMES[keeperFrame];
+}, KEEPER_FRAME_MS);
 
 startBtn.addEventListener("pointerdown", () => startBtn.classList.add("is-pressed"));
 startBtn.addEventListener("pointerup", () => startBtn.classList.remove("is-pressed"));
@@ -97,7 +141,6 @@ startBtn.addEventListener("click", () => {
   menu.hidden = true;
   game.hidden = false;
   requestAnimationFrame(() => {
-    ensureHitboxes();
     layout();
     resetBall(false);
     lastT = performance.now();
@@ -120,10 +163,7 @@ function layout() {
   farY = goal.top - g.top + goal.height * 0.35;
 }
 
-function resetBall(animate) {
-  state = "idle";
-  x = homeX;
-  y = homeY;
+function resetBall(animate, durMs) {
   vx = 0;
   vy = 0;
   patX = 0;
@@ -133,19 +173,191 @@ function resetBall(animate) {
   leftGround = false;
   prevBgZone = "blue";
   ignoreFloorUntil = 0;
+  shotPower = 0;
+  throwStartY = homeY;
   ballEl.classList.remove("is-flying");
-  render();
-  if (animate) {
-    ballEl.animate(
-      [{ opacity: 0 }, { opacity: 1 }],
-      { duration: 220, easing: "ease-out" }
-    );
+
+  if (!animate) {
+    state = "idle";
+    x = homeX;
+    y = homeY;
+    ballEl.style.opacity = "1";
+    setBallRing(true);
+    render();
+    return;
   }
+
+  // Réapparition : glisse du bas → idle + fade 0→1
+  state = "respawning";
+  setBallRing(false);
+  x = homeX;
+  const fromY = game.clientHeight + BALL_SIZE * 0.6;
+  const toY = homeY;
+  y = fromY;
+  ballEl.style.opacity = "0";
+  render();
+
+  const t0 = performance.now();
+  const dur = durMs ?? 280;
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+  function slide(now) {
+    if (state !== "respawning") return;
+    const t = clamp((now - t0) / dur, 0, 1);
+    const e = easeOut(t);
+    y = fromY + (toY - fromY) * e;
+    ballEl.style.opacity = String(t);
+    render();
+    if (t < 1) {
+      requestAnimationFrame(slide);
+    } else {
+      y = toY;
+      ballEl.style.opacity = "1";
+      state = "idle";
+      setBallRing(true);
+      render();
+    }
+  }
+  requestAnimationFrame(slide);
+}
+
+function stopOnGoal(zone) {
+  setBallRing(false);
+  bounceCage();
+  showGoalMarker(zone || "red");
+  goalCount += 1;
+  beginGroundBounce(true);
+}
+
+function stopOnGreen() {
+  setBallRing(false);
+  bounceCage();
+  beginGroundBounce(true);
+}
+
+function stopOnKeeper() {
+  setBallRing(false);
+  bounceCage();
+  beginGroundBounce(true);
+}
+
+/** Raté / hors terrain = 0 */
+function stopOnMiss() {
+  setBallRing(false);
+  beginGroundBounce(false);
+}
+
+/** Sorti sur les côtés */
+function stopOnSideOut() {
+  setBallRing(false);
+  vx = 0;
+  vy = 0;
+  ballEl.classList.remove("is-flying");
+  ballEl.style.opacity = "0";
+  state = "reset";
+  scheduleRecover();
+}
+
+function scheduleRecover() {
+  clearTimeout(recoverTimer);
+  recoverTimer = setTimeout(() => {
+    if (state === "idle" || state === "respawning" || state === "aiming") return;
+    resetBall(true, 130);
+  }, RECOVER_DELAY);
+}
+
+function pitchFloorY() {
+  return game.clientHeight * (BG_BLUE_BOT - 0.04);
+}
+
+function renderGhost() {
+  ghostEl.style.transform = ballTransform(gx, gy);
+  ghostPatternEl.style.transform = `translate(calc(-50% + ${gpatX}px), calc(-50% + ${gpatY}px))`;
+}
+
+function hideGhost() {
+  ghostActive = false;
+  ghostEl.hidden = true;
+  ghostEl.style.opacity = "0";
+  ghostEl.classList.remove("is-flying");
+}
+
+/** Fantôme : saut + sol 1s ; balle joueur revient à 0.3s */
+function beginGroundBounce(fromCage) {
+  gx = x;
+  gy = y;
+  gpatX = patX;
+  gpatY = patY;
+  gvx = (Math.random() - 0.5) * (fromCage ? 28 : 40);
+  gvy = fromCage ? -(240 + Math.random() * 60) : 30 + Math.random() * 40;
+  bounceEndAt = performance.now() + BOUNCE_LIFE;
+  ghostActive = true;
+  ghostEl.hidden = false;
+  ghostEl.style.opacity = "1";
+  ghostEl.classList.add("is-flying");
+  renderGhost();
+
+  ballEl.style.opacity = "0";
+  ballEl.classList.remove("is-flying");
+  setBallRing(false);
+  state = "reset";
+  vx = 0;
+  vy = 0;
+  scheduleRecover();
+}
+
+function updateGhostBounce(dt, now) {
+  if (!ghostActive) return;
+
+  const floorY = pitchFloorY();
+  const onGround = gy >= floorY - 0.5 && gvy >= -40;
+  const gravity = onGround ? 650 : 1050;
+  gvy += gravity * dt;
+
+  if (onGround) {
+    gvx *= Math.pow(0.86, dt * 60);
+  } else {
+    gvx *= Math.pow(0.99, dt * 60);
+  }
+
+  gx += gvx * dt;
+  gy += gvy * dt;
+
+  if (gy >= floorY && gvy > 0) {
+    gy = floorY;
+    const impact = Math.abs(gvy);
+    if (impact > 70) {
+      gvy = -impact * 0.2;
+      gvx *= 0.7;
+    } else {
+      gvy = 0;
+      gvx *= 0.8;
+    }
+  }
+
+  gx = clamp(gx, BALL_SIZE * 0.25, game.clientWidth - BALL_SIZE * 0.25);
+
+  const rollGain = onGround ? 0.004 : 0.02;
+  gpatX = wrapMesh(gpatX + gvx * rollGain * dt * 60);
+  gpatY = wrapMesh(gpatY + Math.abs(gvy) * (onGround ? 0.002 : 0.01) * dt * 60);
+
+  const left = bounceEndAt - now;
+  if (left <= 0) {
+    hideGhost();
+    return;
+  }
+  if (left < 180) {
+    ghostEl.style.opacity = String(clamp(left / 180, 0, 1));
+  }
+
+  renderGhost();
 }
 
 function depthScale(py) {
+  // loin = petit, près = grand
   const t = clamp((nearY - py) / Math.max(1, nearY - farY), 0, 1);
-  return SCALE_NEAR + (SCALE_FAR - SCALE_NEAR) * t;
+  const eased = t * t * (3 - 2 * t);
+  return SCALE_NEAR + (SCALE_FAR - SCALE_NEAR) * eased;
 }
 
 function ballTransform(px, py, scale) {
@@ -160,9 +372,12 @@ function wrapMesh(v) {
 }
 
 function render() {
-  const scale = depthScale(y);
-  ballEl.style.transform = ballTransform(x, y, scale);
+  ballEl.style.transform = ballTransform(x, y);
   patternEl.style.transform = `translate(calc(-50% + ${patX}px), calc(-50% + ${patY}px))`;
+}
+
+function setBallRing(on) {
+  ballEl.classList.toggle("show-ring", on);
 }
 
 function clamp(v, a, b) {
@@ -176,88 +391,184 @@ function localPoint(e) {
 
 function hitBall(px, py) {
   const scale = depthScale(y);
-  const r = (BALL_SIZE / 2) * scale * 1.35;
+  const r = (BALL_SIZE / 2) * scale * 1.12;
   const dx = px - x;
   const dy = py - y;
   return dx * dx + dy * dy <= r * r;
 }
 
-function classifyColor(r, g, b) {
-  if (r < 45 && g < 45 && b < 45) return "black";
-  if (r > 200 && g < 120 && b < 120) return "red";
-  if (g > 200 && g > r && g > b) return "green";
-  if (b > 200 && b > r && b > g) return "blue";
+function maskAt(mx, my) {
+  if (mx < 0 || my < 0 || mx >= CAGE_MASK_W || my >= CAGE_MASK_H) return 0;
+  return CAGE_MASK.charCodeAt(my * CAGE_MASK_W + mx) - 48;
+}
+
+function cellsForZone(zoneId) {
+  if (zoneCellsCache[zoneId]) return zoneCellsCache[zoneId];
+  const cells = [];
+  for (let my = 0; my < CAGE_MASK_H; my++) {
+    for (let mx = 0; mx < CAGE_MASK_W; mx++) {
+      if (maskAt(mx, my) === zoneId) cells.push({ mx, my });
+    }
+  }
+  zoneCellsCache[zoneId] = cells;
+  return cells;
+}
+
+function pickRandomCell(zoneId) {
+  let cells = cellsForZone(zoneId);
+  if (!cells.length) return { mx: 48, my: 30 };
+
+  if (zoneId === ZONE.violet) {
+    // bien au milieu du violet (pas le bord du bleu)
+    const pool = cells.filter((c) => c.my >= 5 && c.my <= 14 && c.mx >= 10 && c.mx <= 86);
+    if (pool.length) cells = pool;
+  } else if (zoneId === ZONE.blue) {
+    const pool = cells.filter((c) => c.my >= 19 && c.my <= 27 && c.mx >= 10 && c.mx <= 86);
+    if (pool.length) cells = pool;
+  } else if (zoneId === ZONE.red) {
+    const pool = cells.filter((c) => c.my >= 31 && c.my <= 42 && c.mx >= 10 && c.mx <= 86);
+    if (pool.length) cells = pool;
+  }
+
+  if (!cells.length) cells = cellsForZone(zoneId);
+  for (let i = 0; i < 8; i++) {
+    const pick = cells[(Math.random() * cells.length) | 0];
+    if (maskAt(pick.mx, pick.my) === zoneId) return pick;
+  }
+  return cells[(Math.random() * cells.length) | 0];
+}
+
+function zoneFromPower(power) {
+  if (power < 0.36) return ZONE.red;
+  if (power < 0.52) return ZONE.blue;
+  return ZONE.violet;
+}
+
+function zoneName(id) {
+  if (id === ZONE.red) return "red";
+  if (id === ZONE.blue) return "blue";
+  if (id === ZONE.violet) return "violet";
+  if (id === ZONE.green) return "green";
   return "other";
 }
 
-function readPixel(pixels, width, height, ix, iy) {
-  if (!pixels) return "other";
-  const px = Math.floor(clamp(ix, 0, width - 1));
-  const py = Math.floor(clamp(iy, 0, height - 1));
-  const i = (py * width + px) * 4;
-  const d = pixels.data;
-  return classifyColor(d[i], d[i + 1], d[i + 2]);
-}
-
-/**
- * Collision réelle : centre du ballon DOM vs hitbox_cage DOM.
- * Plus de conversion manuelle de coordonnées.
- */
-function probeCageZone() {
-  if (!cageReady || !cagePixels) ensureHitboxes();
-  if (!cagePixels) return "other";
-
-  const ball = ballEl.getBoundingClientRect();
+/** Collision : petit carré ~10x10 au centre — ne compte QUE la zone voulue (passe rouge/bleu pour aller au violet) */
+function probeCageAtScreen(cx, cy) {
   const cage = hitboxCageImg.getBoundingClientRect();
   if (cage.width < 2 || cage.height < 2) return "other";
 
-  const cx = ball.left + ball.width / 2;
-  const cy = ball.top + ball.height / 2;
-  const rad = Math.max(ball.width, ball.height) * 0.45;
-
+  const half = BALL_HIT * 0.5;
   const offsets = [
     [0, 0],
-    [0, -rad],
-    [0, rad * 0.4],
-    [-rad, 0],
-    [rad, 0],
-    [-rad * 0.7, -rad * 0.5],
-    [rad * 0.7, -rad * 0.5],
+    [-half, -half], [half, -half], [-half, half], [half, half],
+    [-half, 0], [half, 0], [0, -half], [0, half],
   ];
 
-  let sawGreen = false;
+  const hits = { red: 0, blue: 0, violet: 0, green: 0 };
+  const wanted = zoneName(targetZone);
   for (const [ox, oy] of offsets) {
     const px = cx + ox;
     const py = cy + oy;
     if (px < cage.left || px > cage.right || py < cage.top || py > cage.bottom) continue;
-
-    const ix = ((px - cage.left) / cage.width) * cageCanvas.width;
-    const iy = ((py - cage.top) / cage.height) * cageCanvas.height;
-    const zone = readPixel(cagePixels, cageCanvas.width, cageCanvas.height, ix, iy);
-    if (zone === "red") return "red";
-    if (zone === "green") sawGreen = true;
+    const mx = Math.floor(((px - cage.left) / cage.width) * CAGE_MASK_W);
+    const my = Math.floor(((py - cage.top) / cage.height) * CAGE_MASK_H);
+    const cell = maskAt(mx, my);
+    // uniquement la vraie couleur — pas de fuzzy bleu→violet (sinon but sur le bleu)
+    if (cell === ZONE.violet) hits.violet++;
+    else if (cell === ZONE.blue) hits.blue++;
+    else if (cell === ZONE.red) hits.red++;
+    else if (cell === ZONE.green) hits.green++;
   }
-  return sawGreen ? "green" : "other";
+
+  if (wanted === "violet" && hits.violet >= 1) return "violet";
+  if (wanted === "blue" && hits.blue >= 1) return "blue";
+  if (wanted === "red" && hits.red >= 1) return "red";
+  if (hits.green >= 2) return "green";
+  return "other";
+}
+
+function probeCageZone() {
+  const ball = ballEl.getBoundingClientRect();
+  return probeCageAtScreen(ball.left + ball.width / 2, ball.top + ball.height / 2);
+}
+
+/** Balayage prev→current pour ne pas sauter la zone à haute vitesse */
+function probeCageSwept() {
+  const g = game.getBoundingClientRect();
+  const dist = Math.hypot(x - prevX, y - prevY);
+  const steps = Math.max(1, Math.ceil(dist / 4));
+  let found = "other";
+  const wanted = zoneName(targetZone);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const sx = prevX + (x - prevX) * t;
+    const sy = prevY + (y - prevY) * t;
+    const z = probeCageAtScreen(g.left + sx, g.top + sy);
+    if (z === wanted) return z;
+    if (z === "green") found = "green";
+  }
+  return found;
+}
+
+/** Hitbox = pixels opaques du PNG gardien (frame courante) */
+function keeperAlphaAt(mx, my, mask) {
+  if (!mask) return false;
+  if (mx < 0 || my < 0 || mx >= mask.width || my >= mask.height) return false;
+  if (!mask.data) {
+    const u = mx / mask.width;
+    const v = my / mask.height;
+    return u > 0.22 && u < 0.78 && v > 0.12 && v < 0.96;
+  }
+  return mask.data[(my * mask.width + mx) * 4 + 3] > 40;
+}
+
+function probeKeeperAtScreen(cx, cy) {
+  const rect = keeperEl.getBoundingClientRect();
+  if (rect.width < 2 || rect.height < 2) return false;
+  const half = BALL_HIT * 0.5;
+  const offsets = [
+    [0, 0],
+    [-half, -half], [half, -half], [-half, half], [half, half],
+    [-half, 0], [half, 0], [0, -half], [0, half],
+  ];
+  const mask = keeperMasks[keeperFrame];
+  if (!mask) return false;
+  let hits = 0;
+  for (const [ox, oy] of offsets) {
+    const px = cx + ox;
+    const py = cy + oy;
+    if (px < rect.left || px > rect.right || py < rect.top || py > rect.bottom) continue;
+    let u = (px - rect.left) / rect.width;
+    if (keeperDir > 0) u = 1 - u; // miroir CSS
+    const mx = Math.floor(u * mask.width);
+    const my = Math.floor(((py - rect.top) / rect.height) * mask.height);
+    if (keeperAlphaAt(mx, my, mask)) hits++;
+  }
+  return hits >= 1;
+}
+
+function probeKeeperSwept() {
+  const g = game.getBoundingClientRect();
+  const dist = Math.hypot(x - prevX, y - prevY);
+  const steps = Math.max(1, Math.ceil(dist / 4));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const sx = prevX + (x - prevX) * t;
+    const sy = prevY + (y - prevY) * t;
+    if (probeKeeperAtScreen(g.left + sx, g.top + sy)) return true;
+  }
+  return false;
 }
 
 function probeBgZone() {
-  if (!bgReady || !bgPixels) ensureHitboxes();
-  if (!bgPixels) return "other";
-
-  const ball = ballEl.getBoundingClientRect();
+  const g = game.getBoundingClientRect();
   const bg = hitboxBgImg.getBoundingClientRect();
-  const cx = ball.left + ball.width / 2;
-  const cy = ball.top + ball.height / 2;
-  if (cx < bg.left || cx > bg.right || cy < bg.top || cy > bg.bottom) return "black";
-
-  const scale = Math.max(bg.width / bgCanvas.width, bg.height / bgCanvas.height);
-  const drawW = bgCanvas.width * scale;
-  const drawH = bgCanvas.height * scale;
-  const offX = (bg.width - drawW) / 2;
-  const offY = (bg.height - drawH) / 2;
-  const ix = (cx - bg.left - offX) / scale;
-  const iy = (cy - bg.top - offY) / scale;
-  return readPixel(bgPixels, bgCanvas.width, bgCanvas.height, ix, iy);
+  // même centre 10x10 que la cage
+  const cy = g.top + y;
+  if (bg.height < 2) return "other";
+  const t = (cy - bg.top) / bg.height;
+  if (t >= BG_BLUE_TOP && t <= BG_BLUE_BOT) return "blue";
+  return "black";
 }
 
 function bounceCage() {
@@ -266,19 +577,23 @@ function bounceCage() {
   cageEl.classList.add("is-bounce");
 }
 
-function showGoalMarker() {
+function showGoalMarker(zone) {
   const ball = ballEl.getBoundingClientRect();
   const g = game.getBoundingClientRect();
   const size = Math.max(28, ball.width);
-
+  const colors = {
+    red: "rgba(220, 30, 30, 0.85)",
+    blue: "rgba(40, 90, 255, 0.85)",
+    violet: "rgba(160, 40, 220, 0.85)",
+  };
   goalMarker.hidden = false;
   goalMarker.classList.remove("is-fade");
   goalMarker.style.width = `${size}px`;
   goalMarker.style.height = `${size}px`;
   goalMarker.style.left = `${ball.left - g.left + ball.width / 2}px`;
   goalMarker.style.top = `${ball.top - g.top + ball.height / 2}px`;
+  goalMarker.style.background = colors[zone] || colors.red;
   goalMarker.style.opacity = "1";
-
   clearTimeout(showGoalMarker._t1);
   clearTimeout(showGoalMarker._t2);
   showGoalMarker._t1 = setTimeout(() => {
@@ -290,35 +605,40 @@ function showGoalMarker() {
   }, 1000);
 }
 
-function stopOnCage(zone) {
-  state = "stuck";
-  vx = 0;
-  vy = 0;
-  bounceCage();
-  if (zone === "red") showGoalMarker();
-  render();
-  setTimeout(() => resetBall(true), zone === "red" ? 1300 : 700);
-}
-
 function bounceFloor() {
   if (vy <= 0) return;
+  // rebond faible, peu de retour vers la caméra ensuite
   vy = -Math.abs(vy) * BOUNCE;
-  vx *= 0.85;
-  y -= 2;
+  vx *= 0.88;
+  y = Math.min(y - 2, game.clientHeight * BG_BLUE_BOT - BALL_SIZE * 0.2);
   floorBounceLock = true;
-  setTimeout(() => { floorBounceLock = false; }, 140);
+  setTimeout(() => { floorBounceLock = false; }, 160);
 }
 
 function resolveHits() {
-  // IMPORTANT : appeler après render() pour des getBoundingClientRect à jour
-  const cageZone = probeCageZone();
   const bgZone = probeBgZone();
-
   if (bgZone === "black") leftGround = true;
 
-  if (cageZone === "red" || cageZone === "green") {
+  // gardien d'abord (hitbox = son PNG)
+  if (probeKeeperSwept()) {
     ignoreFloorUntil = performance.now() + 800;
-    stopOnCage(cageZone);
+    stopOnKeeper();
+    prevBgZone = bgZone;
+    return;
+  }
+
+  const cageZone = probeCageSwept();
+  const wanted = zoneName(targetZone);
+  if (cageZone === wanted) {
+    ignoreFloorUntil = performance.now() + 800;
+    stopOnGoal(cageZone);
+    prevBgZone = bgZone;
+    return;
+  }
+
+  if (cageZone === "green") {
+    ignoreFloorUntil = performance.now() + 800;
+    stopOnGreen();
     prevBgZone = bgZone;
     return;
   }
@@ -337,6 +657,33 @@ function resolveHits() {
   prevBgZone = bgZone;
 }
 
+/** Guide vers une cellule RANDOM — violet traverse rouge/bleu jusqu’au haut */
+function applyPowerAim(dt) {
+  const g = game.getBoundingClientRect();
+  const cage = hitboxCageImg.getBoundingClientRect();
+  if (cage.height < 2) return;
+
+  const targetX = (cage.left - g.left) + ((targetMaskX + 0.5) / CAGE_MASK_W) * cage.width;
+  const targetY = (cage.top - g.top) + ((targetMaskY + 0.5) / CAGE_MASK_H) * cage.height;
+
+  const denom = Math.max(40, throwStartY - targetY);
+  const progress = clamp((throwStartY - y) / denom, 0, 1);
+  const boost = targetZone === ZONE.violet ? 2.4 : targetZone === ZONE.blue ? 1.35 : 0.95;
+  const pullY = (0.12 + progress * progress * (1.1 + shotPower * 1.2)) * boost;
+  const pullX = (0.07 + progress * progress * 0.6) * (0.7 + shotPower * 0.4);
+
+  x += (targetX - x) * Math.min(1, pullX * dt * 14);
+  y += (targetY - y) * Math.min(1, pullY * dt * (16 + shotPower * 16));
+
+  // force la montée jusqu’au violet (ne s’arrête pas dans le bleu)
+  if (targetZone === ZONE.violet && y > targetY + 4) {
+    const catchUp = (y - targetY) * 3.2;
+    vy = Math.min(vy, -180 - catchUp - shotPower * 420);
+  } else if (targetZone === ZONE.blue && y > targetY + 6) {
+    vy = Math.min(vy, -120 - shotPower * 280);
+  }
+}
+
 game.addEventListener("pointerdown", (e) => {
   if (state !== "idle") return;
   const p = localPoint(e);
@@ -353,15 +700,14 @@ game.addEventListener("pointermove", (e) => {
   const p = localPoint(e);
   samples.push(p);
   if (samples.length > 8) samples.shift();
-
   if (lastAim) {
     patX = wrapMesh(patX + (p.x - lastAim.x) * ROLL_GAIN);
     patY = wrapMesh(patY + (p.y - lastAim.y) * ROLL_GAIN);
   }
   lastAim = p;
-
-  x = clamp(p.x, BALL_SIZE * 0.4, game.clientWidth - BALL_SIZE * 0.4);
-  y = clamp(p.y, nearY - 40, nearY + 50);
+  x = clamp(p.x, BALL_SIZE * 0.35, game.clientWidth - BALL_SIZE * 0.35);
+  // Large zone vers le bas pour prendre de l'élan
+  y = clamp(p.y, nearY - 50, Math.min(game.clientHeight - BALL_SIZE * 0.35, nearY + game.clientHeight * 0.28));
   render();
 });
 
@@ -370,39 +716,47 @@ function endAim(e) {
   pointerId = null;
   lastAim = null;
 
-  const recent = samples.slice(-5);
+  // Fenêtre courte = vraie vitesse du flick (doigt/souris)
+  const recent = samples.slice(-4);
   if (recent.length < 2) {
     resetBall(false);
     return;
   }
-
   const a = recent[0];
   const b = recent[recent.length - 1];
-  const dt = Math.max(16, b.t - a.t) / 1000;
-  let throwVx = ((b.x - a.x) / dt) * THROW_GAIN;
-  let throwVy = ((b.y - a.y) / dt) * THROW_GAIN;
+  const dt = Math.max(12, b.t - a.t) / 1000;
+  const rawVx = (b.x - a.x) / dt;
+  const rawVy = (b.y - a.y) / dt;
+  const rawSpeed = Math.hypot(rawVx, rawVy);
 
-  const speed = Math.hypot(throwVx, throwVy);
-  if (speed < MIN_SPEED || throwVy >= -20) {
+  if (rawSpeed < MIN_SPEED || rawVy >= -15) {
     resetBall(false);
     return;
   }
 
-  if (speed > MAX_SPEED) {
-    const k = MAX_SPEED / speed;
-    throwVx *= k;
-    throwVy *= k;
-  }
+  // Courbe un peu moins dure pour atteindre le violet
+  const t = clamp((rawSpeed - MIN_SPEED) / POWER_SPAN, 0, 1);
+  const curved = Math.pow(t, 1.65);
+  const flightSpeed = FLIGHT_MIN + curved * (FLIGHT_MAX - FLIGHT_MIN);
 
-  vx = throwVx;
-  vy = throwVy;
+  const inv = 1 / rawSpeed;
+  vx = rawVx * inv * flightSpeed;
+  vy = rawVy * inv * flightSpeed;
+
+  shotPower = curved;
+  targetZone = zoneFromPower(shotPower);
+  const cell = pickRandomCell(targetZone);
+  targetMaskX = cell.mx;
+  targetMaskY = cell.my;
+  throwStartY = y;
+
   floorBounceLock = false;
   leftGround = false;
   ignoreFloorUntil = 0;
-  ensureHitboxes();
   render();
   prevBgZone = probeBgZone();
   state = "flying";
+  setBallRing(false);
   ballEl.classList.add("is-flying");
 }
 
@@ -414,40 +768,47 @@ function loop(now) {
   const dt = Math.min(0.033, (now - lastT) / 1000);
   lastT = now;
 
+  updateKeeper(dt);
+
   if (state === "flying") {
-    vx *= Math.pow(DRAG, dt * 60);
-    vy *= Math.pow(DRAG, dt * 60);
-    x += vx * dt;
-    y += vy * dt;
+    prevX = x;
+    prevY = y;
 
-    patX = wrapMesh(patX + vx * FLIGHT_ROLL * dt);
-    patY = wrapMesh(patY + vy * FLIGHT_ROLL * dt);
-
-    // 1) maj visuelle  2) collision DOM
-    render();
-    resolveHits();
-
-    if (state !== "flying") {
-      requestAnimationFrame(loop);
-      return;
+    // sous-pas si très rapide (évite de sauter la hitbox)
+    const speedNow = Math.hypot(vx, vy);
+    const steps = Math.max(1, Math.ceil((speedNow * dt) / 18));
+    const sdt = dt / steps;
+    for (let s = 0; s < steps; s++) {
+      vx *= Math.pow(DRAG, sdt * 60);
+      vy *= Math.pow(DRAG, sdt * 60);
+      x += vx * sdt;
+      y += vy * sdt;
+      applyPowerAim(sdt);
+      patX = wrapMesh(patX + vx * FLIGHT_ROLL * sdt);
+      patY = wrapMesh(patY + vy * FLIGHT_ROLL * sdt);
+      render();
+      resolveHits();
+      if (state !== "flying") break;
+      prevX = x;
+      prevY = y;
     }
 
-    const w = game.clientWidth;
-    const h = game.clientHeight;
-    const scale = depthScale(y);
-    const r = (BALL_SIZE / 2) * scale;
-    const speed = Math.hypot(vx, vy);
-
-    if (
-      y < -r ||
-      y > h + r ||
-      x < -r ||
-      x > w + r ||
-      (speed < 35 && y < nearY - 80)
-    ) {
-      state = "reset";
-      setTimeout(() => resetBall(true), RESET_DELAY);
+    if (state === "flying") {
+      const w = game.clientWidth;
+      const h = game.clientHeight;
+      const scale = depthScale(y);
+      const r = (BALL_SIZE / 2) * scale;
+      const speed = Math.hypot(vx, vy);
+      if (x < -r || x > w + r) {
+        stopOnSideOut();
+      } else if (y < -r || y > h + r || (speed < 35 && y < nearY - 80)) {
+        stopOnMiss();
+      }
     }
+  }
+
+  if (ghostActive) {
+    updateGhostBounce(dt, now);
   }
 
   requestAnimationFrame(loop);

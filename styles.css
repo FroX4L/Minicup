@@ -277,6 +277,20 @@ body {
   transform-origin: center bottom;
 }
 
+.keeper {
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  transform: translateX(-50%);
+  width: 44%;
+  height: auto;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+  image-rendering: auto;
+  will-change: left, transform;
+}
+
 .hitbox-bg {
   opacity: 0;
   z-index: 1;
@@ -286,9 +300,8 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  opacity: 0.55;
+  opacity: 0;
   z-index: 3;
-  mix-blend-mode: normal;
   pointer-events: none;
 }
 
@@ -325,14 +338,55 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  width: 88px;
-  height: 88px;
+  width: 118px;
+  height: 118px;
   z-index: 5;
+  isolation: isolate;
   will-change: transform;
   transform: translate3d(0, 0, 0) scale(1);
   transform-origin: center center;
   cursor: grab;
   touch-action: none;
+}
+
+.fb-ball--ghost {
+  z-index: 4;
+  pointer-events: none;
+  cursor: default;
+}
+
+.fb-ball::after {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  background: #e53935;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.fb-ball.show-ring::after {
+  opacity: 1;
+  animation: ball-ring-pulse 1.35s ease-in-out infinite;
+}
+
+.fb-ball.is-flying::after,
+.fb-ball:not(.show-ring)::after {
+  animation: none;
+  opacity: 0;
+}
+
+@keyframes ball-ring-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.82;
+  }
 }
 
 .fb-ball.is-flying {
@@ -342,6 +396,7 @@ body {
 
 .fb-ball__sphere {
   position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   border-radius: 50%;
