@@ -265,7 +265,15 @@ function updateKeeper(dt) {
 
   const cfg = diffCfg();
   let speed = (KEEPER_SPEED_BASE * cfg.keeperMul) + goalCount * (KEEPER_SPEED_PER_GOAL * cfg.keeperGoalMul);
-  if (now < keeperBrakeUntil) speed *= 0.22;
+  let shakeX = 0;
+  let shakeY = 0;
+  if (now < keeperBrakeUntil) {
+    speed *= 0.18;
+    shakeX = (Math.random() - 0.5) * 4;
+    shakeY = (Math.random() - 0.5) * 3.5;
+  } else if (keeperEl.classList.contains("is-crowd-shake")) {
+    keeperEl.classList.remove("is-crowd-shake");
+  }
   keeperX += keeperDir * speed * dt;
   if (keeperX <= KEEPER_MIN_X) {
     keeperX = KEEPER_MIN_X;
@@ -278,7 +286,7 @@ function updateKeeper(dt) {
   const bobHz = 1000 / KEEPER_FRAME_MS;
   const s = Math.sin(now * 0.001 * bobHz * Math.PI * 2);
   const bobY = Math.sign(s) * Math.pow(Math.abs(s), 0.55) * KEEPER_BOB_PX;
-  keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y + bobY}px) scale(${fx}, 1)`;
+  keeperEl.style.transform = `translateX(calc(-50% + ${shakeX}px)) translateY(${KEEPER_BASE_Y + bobY + shakeY}px) scale(${fx}, 1)`;
 }
 
 function bounceKeeperHead() {
@@ -314,13 +322,13 @@ function playKeeperSaveAnim() {
   }, KEEPER_CELEBRATE_MS);
 }
 
-function playKeeperAnxiousHead() {
+function playKeeperAnxiousHead(ms = KEEPER_ANXIOUS_MS) {
   if (gameOver || keeperCelebrating) return;
   clearTimeout(keeperHeadTimer);
   setKeeperHead(KEEPER_HEAD_ANXIOUS);
   keeperHeadTimer = setTimeout(() => {
     if (!keeperCelebrating) setKeeperHead(KEEPER_HEAD);
-  }, KEEPER_ANXIOUS_MS);
+  }, ms);
 }
 
 setInterval(() => {
@@ -825,8 +833,6 @@ let pionLast = 0;
 /** @type {{ el: HTMLElement, phase: number, period: number, amp: number }[]} */
 const pionData = [];
 let crowdHelpUsed = false;
-let crowdHelpLockShots = 0;
-let crowdHelpBlockedShot = false;
 let keeperBrakeUntil = 0;
 
 function tryCrowdHelp(e) {
@@ -834,14 +840,19 @@ function tryCrowdHelp(e) {
     e.preventDefault();
     e.stopPropagation();
   }
-  if (state !== "flying" || crowdHelpUsed || crowdHelpBlockedShot || gameOver) return;
+  if (state !== "flying" || crowdHelpUsed || gameOver) return;
   crowdHelpUsed = true;
-  crowdHelpLockShots = 2; // bloqué pendant les 2 prochains tirs
   playUiClick();
-  // ~1 fois sur 10
-  if (Math.random() >= 0.1) return;
+  // ~1 fois sur 5
+  if (Math.random() >= 0.2) return;
   bounceCage();
-  keeperBrakeUntil = performance.now() + 1100;
+  keeperBrakeUntil = performance.now() + 300;
+  playKeeperAnxiousHead(300);
+  if (keeperEl) {
+    keeperEl.classList.remove("is-crowd-shake");
+    void keeperEl.offsetWidth;
+    keeperEl.classList.add("is-crowd-shake");
+  }
   frenzyPions();
 }
 
@@ -1566,9 +1577,8 @@ function endAim(e) {
   }
   spinVel = 0;
   crowdHelpUsed = false;
-  crowdHelpBlockedShot = crowdHelpLockShots > 0;
-  if (crowdHelpBlockedShot) crowdHelpLockShots -= 1;
   keeperBrakeUntil = 0;
+  if (keeperEl) keeperEl.classList.remove("is-crowd-shake");
   render();
   prevBgZone = probeBgZone();
   state = "flying";
