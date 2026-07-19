@@ -34,16 +34,16 @@ const DRAG = 0.994;
 const MIN_SPEED = 90;
 const MAX_SPEED = 2200;
 const FLIGHT_MIN = 45;
-const FLIGHT_MAX = 410;
-const POWER_SPAN = 1700;
+const FLIGHT_MAX = 490;
+const POWER_SPAN = 1550;
 const MESH_TILE = 46;
 const RESET_DELAY = 900;
 const ROLL_GAIN = 0.55;
-const CURVE_SPIN_MAX = 4.5;
+const CURVE_SPIN_MAX = 6.5;
 /** en dessous : pas de déviation (tir quasi droit) */
-const CURVE_DEADZONE = 1.15;
+const CURVE_DEADZONE = 0.95;
 /** rad/s de courbure de trajectoire (arc) */
-const CURVE_TURN = 0.72;
+const CURVE_TURN = 1.05;
 const FLIGHT_ROLL = 0.085;
 const BOUNCE = 0.34;
 /** hitbox collision balle (centre du ballon blanc) */
@@ -1631,7 +1631,7 @@ function applyPowerAim(dt) {
   const boost = targetZone === ZONE.violet ? 1.15 : targetZone === ZONE.blue ? 0.85 : 0.65;
   const pullY = (0.04 + progress * progress * (0.35 + shotPower * 0.45)) * boost * cfg.aimPull;
   const spinAmt = Math.abs(clamp(flightSpin, -CURVE_SPIN_MAX, CURVE_SPIN_MAX));
-  const pullX = (0.03 + progress * progress * 0.28) * (0.5 + shotPower * 0.3) * (1 - Math.min(0.45, spinAmt * 0.1)) * cfg.aimPull;
+  const pullX = (0.03 + progress * progress * 0.28) * (0.5 + shotPower * 0.3) * (1 - Math.min(0.7, spinAmt * 0.14)) * cfg.aimPull;
 
   // part latérale du lancer (0 = droit, 1 = très diagonal)
   const lat = Math.abs(throwVx) / (Math.abs(throwVx) + Math.abs(throwVy) + 1);
@@ -1678,8 +1678,8 @@ game.addEventListener("pointermove", (e) => {
   if (hasSpinAng && dist > 10) {
     let dAng = ang - lastSpinAng;
     dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
-    ballSpin += dAng * 0.45;
-    spinVel += dAng * 5.5;
+    ballSpin += dAng * 0.55;
+    spinVel += dAng * 7.8;
     spinVel = clamp(spinVel, -CURVE_SPIN_MAX, CURVE_SPIN_MAX);
     patX = wrapMesh(patX + dAng * 12);
     patY = wrapMesh(patY + Math.abs(dAng) * 4);
@@ -1741,7 +1741,7 @@ function endAim(e) {
   }
 
   const t = clamp((rawSpeed - MIN_SPEED) / POWER_SPAN, 0, 1);
-  shotPower = Math.pow(t, 1.65);
+  shotPower = Math.pow(t, 1.45);
   targetZone = zoneFromPower(shotPower);
   const cell = pickRandomCell(targetZone);
   targetMaskX = cell.mx;
@@ -1785,9 +1785,9 @@ function loop(now) {
 
   if (state === "aiming") {
     if (Math.abs(spinVel) > 0.002) {
-      ballSpin += spinVel * dt * 0.35;
-      patX = wrapMesh(patX + spinVel * dt * 6);
-      spinVel *= Math.pow(0.06, dt);
+      ballSpin += spinVel * dt * 0.42;
+      patX = wrapMesh(patX + spinVel * dt * 7);
+      spinVel *= Math.pow(0.14, dt);
       render();
     }
   }
@@ -1813,8 +1813,8 @@ function loop(now) {
           vx = Math.cos(na) * spd;
           vy = Math.sin(na) * spd;
         }
-        ballSpin += flightSpin * sdt * 0.7;
-        flightSpin *= Math.pow(0.988, sdt * 60);
+        ballSpin += flightSpin * sdt * 0.95;
+        flightSpin *= Math.pow(0.992, sdt * 60);
       }
       x += vx * sdt;
       y += vy * sdt;

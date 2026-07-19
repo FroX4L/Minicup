@@ -1,10 +1,10 @@
-const CACHE = "minicup-offline-v7";
+const CACHE = "minicup-offline-v8";
 
 const ASSETS = [
   "./",
   "./index.html",
   "./app.js",
-  "./app.js?v=113",
+  "./app.js?v=114",
   "./styles.css",
   "./styles.css?v=97",
   "./manifest.webmanifest",
