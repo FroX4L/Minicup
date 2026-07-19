@@ -1,10 +1,8 @@
 const startBtn = document.getElementById("startBtn");
 const teamPickBtn = document.getElementById("teamPickBtn");
-const scoresBtn = document.getElementById("scoresBtn");
 const diffBtn = document.getElementById("diffBtn");
 const diffBtnLabel = document.getElementById("diffBtnLabel");
 const teamsPanel = document.getElementById("teamsPanel");
-const scoresPanel = document.getElementById("scoresPanel");
 const replayBtn = document.getElementById("replayBtn");
 const quitBtn = document.getElementById("quitBtn");
 const soundBtnMenu = document.getElementById("soundBtnMenu");
@@ -24,6 +22,7 @@ const keeperBodyEl = document.getElementById("keeperBody");
 const keeperHeadEl = document.getElementById("keeperHead");
 const goalMarker = document.getElementById("goalMarker");
 const scoreValEl = document.getElementById("scoreVal");
+const scoreRecapEl = document.getElementById("scoreRecap");
 const livesEl = document.getElementById("livesEl");
 const hitboxBgImg = document.getElementById("hitboxBg");
 const hitboxCageImg = document.getElementById("hitboxCage");
@@ -35,7 +34,7 @@ const DRAG = 0.994;
 const MIN_SPEED = 90;
 const MAX_SPEED = 2200;
 const FLIGHT_MIN = 45;
-const FLIGHT_MAX = 360;
+const FLIGHT_MAX = 410;
 const POWER_SPAN = 1700;
 const MESH_TILE = 46;
 const RESET_DELAY = 900;
@@ -59,6 +58,10 @@ const KEEPER_HEAD = "Gardien_head_idle.png";
 const KEEPER_HEAD_SMILE = "Gardien_head_souriant.png";
 const KEEPER_HEAD_ANXIOUS = "Gardien_head_anxious.png";
 const KEEPER_HIT = "Gardien_Goal_hit.png";
+const KEEPER_LAUGH = "Gardien_laugh_bas.png";
+const KEEPER_HEAD_LAUGH_A = ["Gardien_head_laugh1.png", "Gardien_head_laugh2.png"];
+const KEEPER_HEAD_LAUGH_B = ["Gardien_head_laugh3.png", "Gardien_head_laugh4.png"];
+const LAUGH_PHASE_SWITCH_MS = 1000;
 const KEEPER_WIN_MS = 500;
 const KEEPER_FRAME_MS = 270;
 const KEEPER_CELEBRATE_MS = 1000;
@@ -77,24 +80,24 @@ const DIFF_LABELS = {
 /** Réglages par difficulté */
 const DIFF = {
   easy: {
-    keeperMul: 0.55,
-    keeperGoalMul: 0.45,
+    keeperMul: 0.72,
+    keeperGoalMul: 0.58,
     aimPull: 1.55,
     aimLat: 1.35,
     keeperMinHits: 3,
     keeperForgive: 0.62,
   },
   normal: {
-    keeperMul: 1,
-    keeperGoalMul: 1,
+    keeperMul: 1.2,
+    keeperGoalMul: 1.15,
     aimPull: 1,
     aimLat: 1,
     keeperMinHits: 1,
     keeperForgive: 0,
   },
   hard: {
-    keeperMul: 1.65,
-    keeperGoalMul: 1.5,
+    keeperMul: 1.9,
+    keeperGoalMul: 1.7,
     aimPull: 1,
     aimLat: 1,
     keeperMinHits: 1,
@@ -102,11 +105,56 @@ const DIFF = {
   },
 };
 
+const COOKIE_DAYS = 400;
+
+function setCookie(name, value, days = COOKIE_DAYS) {
+  try {
+    const maxAge = Math.floor(days * 24 * 60 * 60);
+    const encoded = encodeURIComponent(String(value));
+    document.cookie = `${name}=${encoded}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  } catch (_) {}
+}
+
+function getCookie(name) {
+  try {
+    const prefix = `${name}=`;
+    const parts = document.cookie.split(";");
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (part.startsWith(prefix)) {
+        return decodeURIComponent(part.slice(prefix.length));
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+/** Cookie d’abord, sinon migre depuis localStorage */
+function loadSave(key) {
+  const fromCookie = getCookie(key);
+  if (fromCookie != null && fromCookie !== "") return fromCookie;
+  try {
+    const fromLs = localStorage.getItem(key);
+    if (fromLs != null && fromLs !== "") {
+      setCookie(key, fromLs);
+      return fromLs;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function saveValue(key, value) {
+  setCookie(key, value);
+  try {
+    localStorage.setItem(key, String(value));
+  } catch (_) {}
+}
+
 let difficulty = "normal";
-try {
-  const d = localStorage.getItem("minicup-diff");
+{
+  const d = loadSave("minicup-diff");
   if (DIFF_ORDER.includes(d)) difficulty = d;
-} catch (_) {}
+}
 
 function diffCfg() {
   return DIFF[difficulty] || DIFF.normal;
@@ -121,9 +169,7 @@ function syncDiffButton() {
 function cycleDifficulty() {
   const i = DIFF_ORDER.indexOf(difficulty);
   difficulty = DIFF_ORDER[(i + 1) % DIFF_ORDER.length];
-  try {
-    localStorage.setItem("minicup-diff", difficulty);
-  } catch (_) {}
+  saveValue("minicup-diff", difficulty);
   syncDiffButton();
 }
 const KEEPER_BOB_PX = 3.5;
@@ -202,6 +248,22 @@ let keeperBounceAt = 0;
 let gameOver = false;
 let keeperWinFrame = 0;
 let keeperWinTimer = null;
+let keeperLaughing = false;
+let keeperLaughTimer = null;
+let keeperLaughPhaseTimer = null;
+let loseSeqTimer = null;
+let laughHeadFrame = 0;
+/** @type {{ left: number, top: number, n: number }[]} */
+let goalHits = [];
+
+function clearGoalRecapDots() {
+  document.querySelectorAll(".goal-recap-dot").forEach((el) => el.remove());
+}
+
+function resetGoalHits() {
+  goalHits = [];
+  clearGoalRecapDots();
+}
 
 function loadKeeperMask(src, onDone) {
   const img = new Image();
@@ -249,7 +311,7 @@ function updateKeeper(dt) {
   const now = performance.now();
   const fx = keeperFlipScaleX();
 
-  if (gameOver) {
+  if (gameOver || keeperLaughing) {
     keeperEl.style.left = `${keeperX * 100}%`;
     keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
     return;
@@ -289,11 +351,20 @@ function updateKeeper(dt) {
   keeperEl.style.transform = `translateX(calc(-50% + ${shakeX}px)) translateY(${KEEPER_BASE_Y + bobY + shakeY}px) scale(${fx}, 1)`;
 }
 
+function bounceKeeperPart(el, className) {
+  if (!el) return;
+  el.classList.remove(className);
+  void el.offsetWidth;
+  el.classList.add(className);
+}
+
 function bounceKeeperHead() {
-  if (!keeperHeadEl) return;
-  keeperHeadEl.classList.remove("is-head-bounce");
-  void keeperHeadEl.offsetWidth;
-  keeperHeadEl.classList.add("is-head-bounce");
+  bounceKeeperPart(keeperHeadEl, "is-head-bounce");
+}
+
+function bounceKeeperLaugh() {
+  bounceKeeperPart(keeperHeadEl, "is-head-bounce");
+  bounceKeeperPart(keeperBodyEl, "is-body-bounce");
 }
 
 function setKeeperHead(src) {
@@ -332,29 +403,153 @@ function playKeeperAnxiousHead(ms = KEEPER_ANXIOUS_MS) {
 }
 
 setInterval(() => {
-  if (!keeperBodyEl || keeperCelebrating || gameOver) return;
+  if (!keeperBodyEl || keeperCelebrating || keeperLaughing || gameOver) return;
   keeperFrame = 1 - keeperFrame;
   keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
 }, KEEPER_FRAME_MS);
 
-function showGameOver() {
+function clearLoseSequenceTimers() {
+  clearTimeout(loseSeqTimer);
+  loseSeqTimer = null;
+  clearTimeout(keeperLaughPhaseTimer);
+  keeperLaughPhaseTimer = null;
+  clearInterval(keeperLaughTimer);
+  keeperLaughTimer = null;
+  keeperLaughing = false;
+  stopSfx("laugh");
+}
+
+function startLoseSequence() {
   gameOver = true;
   state = "idle";
   recordTeamScore(score);
   clearTimeout(keeperCelebrateTimer);
   clearTimeout(keeperHeadTimer);
+  clearTimeout(recoverTimer);
+  clearLoseSequenceTimers();
+  clearInterval(keeperWinTimer);
+  keeperWinTimer = null;
   keeperCelebrating = false;
+  clearTimeout(showGoalMarker._t1);
+  clearTimeout(showGoalMarker._t2);
+  if (goalMarker) {
+    goalMarker.hidden = true;
+    goalMarker.style.opacity = "0";
+  }
+
+  if (ballEl) {
+    ballEl.hidden = true;
+    ballEl.style.opacity = "0";
+    ballEl.classList.remove("is-flying");
+  }
+  hideGhost();
+  if (loseScreen) loseScreen.hidden = true;
+
+  // Gardien qui se moque : laugh1/2 puis après 1s laugh3/4 + bounce tête+bas
+  keeperLaughing = true;
+  laughHeadFrame = 0;
+  let laughPair = KEEPER_HEAD_LAUGH_A;
+  playSfx("laugh");
+  if (keeperBodyEl) keeperBodyEl.src = KEEPER_LAUGH;
+  if (keeperHeadEl) {
+    keeperHeadEl.src = laughPair[0];
+    bounceKeeperLaugh();
+  }
+  const fx = keeperFlipScaleX();
+  if (keeperEl) {
+    keeperEl.style.left = `${keeperX * 100}%`;
+    keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
+  }
+  keeperLaughPhaseTimer = setTimeout(() => {
+    if (!keeperLaughing) return;
+    laughPair = KEEPER_HEAD_LAUGH_B;
+    laughHeadFrame = 0;
+    if (keeperHeadEl) {
+      keeperHeadEl.src = laughPair[0];
+      bounceKeeperLaugh();
+    }
+  }, LAUGH_PHASE_SWITCH_MS);
+  keeperLaughTimer = setInterval(() => {
+    if (!keeperLaughing || !keeperHeadEl) return;
+    laughHeadFrame = 1 - laughHeadFrame;
+    keeperHeadEl.src = laughPair[laughHeadFrame];
+    bounceKeeperLaugh();
+  }, 220);
+
+  const wrap = document.querySelector(".cage-wrap");
+  clearGoalRecapDots();
+  const dots = goalHits.map((hit) => {
+    const dot = document.createElement("div");
+    dot.className = "goal-recap-dot";
+    dot.style.left = `${hit.left}px`;
+    dot.style.top = `${hit.top}px`;
+    if (wrap) wrap.appendChild(dot);
+    return dot;
+  });
+
+  if (scoreRecapEl) {
+    scoreRecapEl.hidden = false;
+    scoreRecapEl.textContent = "0";
+    scoreRecapEl.classList.remove("is-flash");
+  }
+
+  const finalScore = score;
+  const startedAt = performance.now();
+  const STEP_MS = 200;
+  const MIN_MS = 2500;
+
+  let step = 0;
+  const endWhenReady = () => {
+    const elapsed = performance.now() - startedAt;
+    const wait = Math.max(0, MIN_MS - elapsed);
+    loseSeqTimer = setTimeout(finishLoseSequence, wait);
+  };
+
+  const flashNext = () => {
+    if (step >= finalScore) {
+      endWhenReady();
+      return;
+    }
+    step += 1;
+    if (scoreRecapEl) {
+      scoreRecapEl.textContent = String(step);
+      scoreRecapEl.classList.remove("is-flash");
+      void scoreRecapEl.offsetWidth;
+      scoreRecapEl.classList.add("is-flash");
+    }
+    dots.forEach((d, i) => d.classList.toggle("is-lit", i < step));
+    loseSeqTimer = setTimeout(flashNext, STEP_MS);
+  };
+
+  if (finalScore <= 0) {
+    if (scoreRecapEl) {
+      scoreRecapEl.textContent = "0";
+      scoreRecapEl.classList.add("is-flash");
+    }
+    loseSeqTimer = setTimeout(finishLoseSequence, MIN_MS);
+  } else {
+    flashNext();
+  }
+}
+
+function finishLoseSequence() {
+  clearLoseSequenceTimers();
+  clearGoalRecapDots();
+  if (scoreRecapEl) {
+    scoreRecapEl.hidden = true;
+    scoreRecapEl.classList.remove("is-flash");
+  }
+  if (scoreValEl) scoreValEl.textContent = String(score);
+  showLoseMenu();
+}
+
+function showLoseMenu() {
   clearInterval(keeperWinTimer);
   keeperWinFrame = 0;
   if (keeperBodyEl) keeperBodyEl.src = KEEPER_WIN[0];
   if (keeperHeadEl) {
     keeperHeadEl.src = KEEPER_HEAD_SMILE;
     bounceKeeperHead();
-  }
-  const fx = keeperFlipScaleX();
-  if (keeperEl) {
-    keeperEl.style.left = `${keeperX * 100}%`;
-    keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
   }
   keeperWinTimer = setInterval(() => {
     if (!gameOver || !keeperBodyEl) return;
@@ -367,10 +562,20 @@ function showGameOver() {
   playSfx("lose");
 }
 
+function showGameOver() {
+  startLoseSequence();
+}
+
 function replayGame() {
   gameOver = false;
+  clearLoseSequenceTimers();
   clearInterval(keeperWinTimer);
   keeperWinTimer = null;
+  resetGoalHits();
+  if (scoreRecapEl) {
+    scoreRecapEl.hidden = true;
+    scoreRecapEl.classList.remove("is-flash");
+  }
   if (loseScreen) loseScreen.hidden = true;
   score = 0;
   goalCount = 0;
@@ -385,14 +590,19 @@ function replayGame() {
 function quitToMenu() {
   gameOver = false;
   recordTeamScore(score);
+  clearLoseSequenceTimers();
   clearInterval(keeperWinTimer);
   keeperWinTimer = null;
   clearTimeout(keeperCelebrateTimer);
   clearTimeout(keeperHeadTimer);
   keeperCelebrating = false;
+  resetGoalHits();
+  if (scoreRecapEl) {
+    scoreRecapEl.hidden = true;
+    scoreRecapEl.classList.remove("is-flash");
+  }
   if (loseScreen) loseScreen.hidden = true;
   if (teamsPanel) teamsPanel.hidden = true;
-  if (scoresPanel) scoresPanel.hidden = true;
   if (ballEl) {
     ballEl.hidden = false;
     ballEl.style.opacity = "1";
@@ -419,14 +629,16 @@ function bindPress(btn) {
 }
 
 let soundOn = true;
-try {
-  soundOn = localStorage.getItem("minicup-sound") !== "0";
-} catch (_) {}
+{
+  const s = loadSave("minicup-sound");
+  if (s != null) soundOn = s !== "0";
+}
 
 const sfx = {
   kick: new Audio("kick.mp3"),
   filet: new Audio("filet.mp3"),
   lose: new Audio("lose.mp3"),
+  laugh: new Audio("laugh.mp3"),
   stop: new Audio("stop.mp3"),
   win1: new Audio("win1.mp3"),
   win2: new Audio("win2.mp3"),
@@ -452,6 +664,15 @@ function playSfx(name) {
     a.currentTime = 0;
     const p = a.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch (_) {}
+}
+
+function stopSfx(name) {
+  const a = sfx[name];
+  if (!a) return;
+  try {
+    a.pause();
+    a.currentTime = 0;
   } catch (_) {}
 }
 
@@ -502,9 +723,7 @@ function syncSoundButtons() {
 
 function toggleSound() {
   soundOn = !soundOn;
-  try {
-    localStorage.setItem("minicup-sound", soundOn ? "1" : "0");
-  } catch (_) {}
+  saveValue("minicup-sound", soundOn ? "1" : "0");
   syncSoundButtons();
 }
 
@@ -525,7 +744,7 @@ const TEAM_SCORES_KEY = "minicup-team-scores";
 
 function loadTeamScores() {
   try {
-    const raw = localStorage.getItem(TEAM_SCORES_KEY);
+    const raw = loadSave(TEAM_SCORES_KEY);
     if (!raw) return {};
     const data = JSON.parse(raw);
     return data && typeof data === "object" ? data : {};
@@ -535,9 +754,7 @@ function loadTeamScores() {
 }
 
 function saveTeamScores(data) {
-  try {
-    localStorage.setItem(TEAM_SCORES_KEY, JSON.stringify(data));
-  } catch (_) {}
+  saveValue(TEAM_SCORES_KEY, JSON.stringify(data));
 }
 
 let teamBestScores = loadTeamScores();
@@ -558,22 +775,9 @@ function recordTeamScore(value) {
 }
 
 function renderTeamScores() {
-  const grid = document.getElementById("teamScoresGrid");
-  if (!grid) return;
-  grid.innerHTML = "";
   TEAM_IDS.forEach((id) => {
-    const row = document.createElement("div");
-    row.className = "team-score" + (id === selectedTeam ? " is-current" : "");
-    row.dataset.team = id;
-    const flag = document.createElement("span");
-    flag.className = `flag flag--${id}`;
-    flag.setAttribute("aria-hidden", "true");
-    const val = document.createElement("span");
-    val.className = "team-score__val";
-    val.textContent = String(getTeamBest(id));
-    row.appendChild(flag);
-    row.appendChild(val);
-    grid.appendChild(row);
+    const el = document.querySelector(`[data-team-score="${id}"]`);
+    if (el) el.textContent = String(getTeamBest(id));
   });
 }
 
@@ -591,26 +795,16 @@ function selectTeam(btn) {
   btn.classList.add("is-selected");
   btn.setAttribute("aria-selected", "true");
   selectedTeam = btn.dataset.team || "fr";
-  try {
-    localStorage.setItem("minicup-team", selectedTeam);
-  } catch (_) {}
+  saveValue("minicup-team", selectedTeam);
   updateHudTeamFlag();
   renderTeamScores();
   if (teamsPanel) teamsPanel.hidden = true;
-  if (scoresPanel) scoresPanel.hidden = true;
 }
 
 function toggleTeamsPanel() {
   if (!teamsPanel) return;
-  if (scoresPanel) scoresPanel.hidden = true;
+  if (teamsPanel.hidden) renderTeamScores();
   teamsPanel.hidden = !teamsPanel.hidden;
-}
-
-function toggleScoresPanel() {
-  if (!scoresPanel) return;
-  if (teamsPanel) teamsPanel.hidden = true;
-  if (scoresPanel.hidden) renderTeamScores();
-  scoresPanel.hidden = !scoresPanel.hidden;
 }
 
 const teamGrid = document.getElementById("teamGrid");
@@ -621,8 +815,8 @@ if (teamGrid) {
   });
 }
 
-try {
-  const savedTeam = localStorage.getItem("minicup-team");
+{
+  const savedTeam = loadSave("minicup-team");
   if (savedTeam && TEAM_IDS.includes(savedTeam)) {
     selectedTeam = savedTeam;
     const btn = teamGrid && teamGrid.querySelector(`.team[data-team="${savedTeam}"]`);
@@ -635,14 +829,13 @@ try {
       btn.setAttribute("aria-selected", "true");
     }
   }
-} catch (_) {}
+}
 renderTeamScores();
 updateHudTeamFlag();
 
 bindPress(startBtn);
 bindPress(diffBtn);
 bindPress(teamPickBtn);
-bindPress(scoresBtn);
 bindPress(replayBtn);
 bindPress(quitBtn);
 
@@ -655,25 +848,14 @@ if (teamPickBtn) {
   teamPickBtn.addEventListener("click", () => toggleTeamsPanel());
 }
 
-if (scoresBtn) {
-  scoresBtn.addEventListener("click", () => toggleScoresPanel());
-}
-
 if (teamsPanel) {
   teamsPanel.addEventListener("click", (e) => {
     if (e.target === teamsPanel) teamsPanel.hidden = true;
   });
 }
 
-if (scoresPanel) {
-  scoresPanel.addEventListener("click", (e) => {
-    if (e.target === scoresPanel) scoresPanel.hidden = true;
-  });
-}
-
 startBtn.addEventListener("click", () => {
   if (teamsPanel) teamsPanel.hidden = true;
-  if (scoresPanel) scoresPanel.hidden = true;
   menu.hidden = true;
   game.hidden = false;
   updateHudTeamFlag();
@@ -684,6 +866,7 @@ startBtn.addEventListener("click", () => {
     goalCount = 0;
     lives = 3;
     gameOver = false;
+    resetGoalHits();
     updateHud();
     resetBall(false);
     lastT = performance.now();
@@ -1340,14 +1523,17 @@ function showGoalMarker() {
   const ball = ballEl.getBoundingClientRect();
   const wrap = document.querySelector(".cage-wrap").getBoundingClientRect();
   const size = Math.max(36, ball.width * 1.05);
+  const left = ball.left - wrap.left + ball.width / 2;
+  const top = ball.top - wrap.top + ball.height / 2;
+  goalHits.push({ left, top, n: score });
   goalMarker.hidden = false;
   goalMarker.classList.remove("is-fade");
   goalMarker.textContent = String(score);
   goalMarker.style.width = `${size}px`;
   goalMarker.style.height = `${size}px`;
   goalMarker.style.fontSize = `${Math.max(16, size * 0.42)}px`;
-  goalMarker.style.left = `${ball.left - wrap.left + ball.width / 2}px`;
-  goalMarker.style.top = `${ball.top - wrap.top + ball.height / 2}px`;
+  goalMarker.style.left = `${left}px`;
+  goalMarker.style.top = `${top}px`;
   goalMarker.style.background = "#e53935";
   goalMarker.style.border = "none";
   goalMarker.style.boxShadow = "none";

@@ -1,0 +1,19 @@
+{
+  "name": "Mini Cup",
+  "short_name": "Mini Cup",
+  "description": "Mini-jeu football",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b3d1e",
+  "theme_color": "#1a73e8",
+  "icons": [
+    {
+      "src": "ball.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
