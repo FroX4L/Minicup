@@ -12,14 +12,14 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="screen">
+  <main class="screen" id="menu">
     <div class="glow glow-a" aria-hidden="true"></div>
     <div class="glow glow-b" aria-hidden="true"></div>
     <div class="pitch" aria-hidden="true"></div>
 
     <header class="brand">
       <div class="logo" aria-hidden="true">
-        <span class="ball"></span>
+        <span class="logo-ball"></span>
       </div>
       <h1>Mini Cup</h1>
       <p>Prêt pour le match&nbsp;?</p>
@@ -29,6 +29,65 @@
       <span>Démarrer</span>
     </button>
   </main>
+
+  <section class="game" id="game" hidden>
+    <img class="game-bg" src="bg.png" alt="" draggable="false" />
+    <img class="game-bg hitbox-bg" id="hitboxBg" src="hitbox_bg.png" alt="" draggable="false" />
+
+    <div class="goal-area" id="goalArea">
+      <div class="cage-wrap">
+        <img class="cage" id="cage" src="cage.png" alt="" draggable="false" />
+        <img class="cage hitbox-cage" id="hitboxCage" src="hitbox_cage.png" alt="" draggable="false" />
+      </div>
+    </div>
+
+    <div class="goal-marker" id="goalMarker" hidden></div>
+
+    <div class="fb-ball" id="ball" aria-hidden="true">
+      <div class="fb-ball__sphere">
+        <div class="fb-ball__mesh" id="ballPattern">
+          <svg class="fb-ball__svg" viewBox="0 0 240 208" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="240" height="208" fill="#ffffff"/>
+            <g fill="#0f1a5c">
+              <!-- rangée 0 — hex plus petits -->
+              <polygon points="26,10 38,17 38,31 26,38 14,31 14,17"/>
+              <polygon points="72,10 84,17 84,31 72,38 60,31 60,17"/>
+              <polygon points="118,10 130,17 130,31 118,38 106,31 106,17"/>
+              <polygon points="164,10 176,17 176,31 164,38 152,31 152,17"/>
+              <polygon points="210,10 222,17 222,31 210,38 198,31 198,17"/>
+              <!-- rangée 1 -->
+              <polygon points="49,40 61,47 61,61 49,68 37,61 37,47"/>
+              <polygon points="95,40 107,47 107,61 95,68 83,61 83,47"/>
+              <polygon points="141,40 153,47 153,61 141,68 129,61 129,47"/>
+              <polygon points="187,40 199,47 199,61 187,68 175,61 175,47"/>
+              <!-- rangée 2 -->
+              <polygon points="26,70 38,77 38,91 26,98 14,91 14,77"/>
+              <polygon points="72,70 84,77 84,91 72,98 60,91 60,77"/>
+              <polygon points="118,70 130,77 130,91 118,98 106,91 106,77"/>
+              <polygon points="164,70 176,77 176,91 164,98 152,91 152,77"/>
+              <polygon points="210,70 222,77 222,91 210,98 198,91 198,77"/>
+              <!-- rangée 3 -->
+              <polygon points="49,100 61,107 61,121 49,128 37,121 37,107"/>
+              <polygon points="95,100 107,107 107,121 95,128 83,121 83,107"/>
+              <polygon points="141,100 153,107 153,121 141,128 129,121 129,107"/>
+              <polygon points="187,100 199,107 199,121 187,128 175,121 175,107"/>
+              <!-- rangée 4 -->
+              <polygon points="26,130 38,137 38,151 26,158 14,151 14,137"/>
+              <polygon points="72,130 84,137 84,151 72,158 60,151 60,137"/>
+              <polygon points="118,130 130,137 130,151 118,158 106,151 106,137"/>
+              <polygon points="164,130 176,137 176,151 164,158 152,151 152,137"/>
+              <polygon points="210,130 222,137 222,151 210,158 198,151 198,137"/>
+              <!-- rangée 5 -->
+              <polygon points="49,160 61,167 61,181 49,188 37,181 37,167"/>
+              <polygon points="95,160 107,167 107,181 95,188 83,181 83,167"/>
+              <polygon points="141,160 153,167 153,181 141,188 129,181 129,167"/>
+              <polygon points="187,160 199,167 199,181 187,188 175,181 175,167"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <script src="app.js"></script>
 </body>
