@@ -1,6 +1,12 @@
 const startBtn = document.getElementById("startBtn");
+const teamPickBtn = document.getElementById("teamPickBtn");
+const teamsPanel = document.getElementById("teamsPanel");
+const replayBtn = document.getElementById("replayBtn");
+const quitBtn = document.getElementById("quitBtn");
 const menu = document.getElementById("menu");
 const game = document.getElementById("game");
+const loseScreen = document.getElementById("loseScreen");
+const hudTeamFlag = document.getElementById("hudTeamFlag");
 const ballEl = document.getElementById("ball");
 const patternEl = document.getElementById("ballPattern");
 const ghostEl = document.getElementById("ballGhost");
@@ -28,19 +34,29 @@ const POWER_SPAN = 1700;
 const MESH_TILE = 46;
 const RESET_DELAY = 900;
 const ROLL_GAIN = 0.55;
+const CURVE_SPIN_MAX = 4.5;
+/** en dessous : pas de déviation (tir quasi droit) */
+const CURVE_DEADZONE = 1.15;
+/** rad/s de courbure de trajectoire (arc) */
+const CURVE_TURN = 0.72;
 const FLIGHT_ROLL = 0.085;
 const BOUNCE = 0.34;
 /** hitbox collision balle (centre du ballon blanc) */
 const BALL_HIT = 10;
-const RECOVER_DELAY = 300;
+const RECOVER_DELAY = 100;
 const BOUNCE_LIFE = 1000;
-const SIDE_MARGIN = 0.04; // annule si trop près des bords
+const SIDE_MARGIN = 0.04; // zone de clamp au tir / aim
+const SIDE_OUT_MARGIN = -0.02; // sortie latérale plus tard (laisse passer les effets)
 const KEEPER_FRAMES = ["Gardien_walk_bas1.png", "Gardien_walk_bas2.png"];
+const KEEPER_WIN = ["Gardien_win1.png", "Gardien_win2.png"];
 const KEEPER_HEAD = "Gardien_head_idle.png";
 const KEEPER_HEAD_SMILE = "Gardien_head_souriant.png";
+const KEEPER_HEAD_ANXIOUS = "Gardien_head_anxious.png";
 const KEEPER_HIT = "Gardien_Goal_hit.png";
+const KEEPER_WIN_MS = 500;
 const KEEPER_FRAME_MS = 270;
 const KEEPER_CELEBRATE_MS = 1000;
+const KEEPER_ANXIOUS_MS = 500;
 const KEEPER_MIN_X = 0.16;
 const KEEPER_MAX_X = 0.84;
 const KEEPER_SPEED_BASE = 0.14;
@@ -79,6 +95,11 @@ let lastT = 0;
 let pointerId = null;
 let samples = [];
 let lastAim = null;
+let ballSpin = 0;
+let spinVel = 0;
+let flightSpin = 0;
+let lastSpinAng = 0;
+let hasSpinAng = false;
 let floorBounceLock = false;
 let leftGround = false;
 let prevBgZone = "blue";
@@ -108,7 +129,11 @@ let score = 0;
 let lives = 3;
 let keeperCelebrating = false;
 let keeperCelebrateTimer = null;
+let keeperHeadTimer = null;
 let keeperBounceAt = 0;
+let gameOver = false;
+let keeperWinFrame = 0;
+let keeperWinTimer = null;
 
 function loadKeeperMask(src, onDone) {
   const img = new Image();
@@ -156,6 +181,12 @@ function updateKeeper(dt) {
   const now = performance.now();
   const fx = keeperFlipScaleX();
 
+  if (gameOver) {
+    keeperEl.style.left = `${keeperX * 100}%`;
+    keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
+    return;
+  }
+
   if (keeperCelebrating) {
     const by = KEEPER_BASE_Y + keeperBounceY(now);
     const sc = keeperBounceScale(now);
@@ -180,46 +211,206 @@ function updateKeeper(dt) {
   keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y + bobY}px) scale(${fx}, 1)`;
 }
 
+function bounceKeeperHead() {
+  if (!keeperHeadEl) return;
+  keeperHeadEl.classList.remove("is-head-bounce");
+  void keeperHeadEl.offsetWidth;
+  keeperHeadEl.classList.add("is-head-bounce");
+}
+
+function setKeeperHead(src) {
+  if (!keeperHeadEl) return;
+  if (keeperHeadEl.getAttribute("src") !== src) {
+    keeperHeadEl.src = src;
+  }
+  bounceKeeperHead();
+}
+
 function playKeeperSaveAnim() {
+  if (gameOver) return;
   keeperCelebrating = true;
   keeperBounceAt = performance.now();
   clearTimeout(keeperCelebrateTimer);
+  clearTimeout(keeperHeadTimer);
   if (keeperBodyEl) keeperBodyEl.src = KEEPER_HIT;
-  if (keeperHeadEl) keeperHeadEl.src = KEEPER_HEAD_SMILE;
+  setKeeperHead(KEEPER_HEAD_SMILE);
   const fx = keeperFlipScaleX();
   keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
 
   keeperCelebrateTimer = setTimeout(() => {
     keeperCelebrating = false;
     if (keeperBodyEl) keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
-    if (keeperHeadEl) keeperHeadEl.src = KEEPER_HEAD;
+    setKeeperHead(KEEPER_HEAD);
   }, KEEPER_CELEBRATE_MS);
 }
 
+function playKeeperAnxiousHead() {
+  if (gameOver || keeperCelebrating) return;
+  clearTimeout(keeperHeadTimer);
+  setKeeperHead(KEEPER_HEAD_ANXIOUS);
+  keeperHeadTimer = setTimeout(() => {
+    if (!keeperCelebrating) setKeeperHead(KEEPER_HEAD);
+  }, KEEPER_ANXIOUS_MS);
+}
+
 setInterval(() => {
-  if (!keeperBodyEl || keeperCelebrating) return;
+  if (!keeperBodyEl || keeperCelebrating || gameOver) return;
   keeperFrame = 1 - keeperFrame;
   keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
 }, KEEPER_FRAME_MS);
 
-startBtn.addEventListener("pointerdown", () => startBtn.classList.add("is-pressed"));
-startBtn.addEventListener("pointerup", () => startBtn.classList.remove("is-pressed"));
-startBtn.addEventListener("pointerleave", () => startBtn.classList.remove("is-pressed"));
+function showGameOver() {
+  gameOver = true;
+  state = "idle";
+  clearTimeout(keeperCelebrateTimer);
+  clearTimeout(keeperHeadTimer);
+  keeperCelebrating = false;
+  clearInterval(keeperWinTimer);
+  keeperWinFrame = 0;
+  if (keeperBodyEl) keeperBodyEl.src = KEEPER_WIN[0];
+  if (keeperHeadEl) {
+    keeperHeadEl.src = KEEPER_HEAD_SMILE;
+    bounceKeeperHead();
+  }
+  const fx = keeperFlipScaleX();
+  if (keeperEl) {
+    keeperEl.style.left = `${keeperX * 100}%`;
+    keeperEl.style.transform = `translateX(-50%) translateY(${KEEPER_BASE_Y}px) scale(${fx}, 1)`;
+  }
+  keeperWinTimer = setInterval(() => {
+    if (!gameOver || !keeperBodyEl) return;
+    keeperWinFrame = 1 - keeperWinFrame;
+    keeperBodyEl.src = KEEPER_WIN[keeperWinFrame];
+  }, KEEPER_WIN_MS);
+  if (ballEl) ballEl.hidden = true;
+  if (ghostEl) ghostEl.hidden = true;
+  if (loseScreen) loseScreen.hidden = false;
+}
+
+function replayGame() {
+  gameOver = false;
+  clearInterval(keeperWinTimer);
+  keeperWinTimer = null;
+  if (loseScreen) loseScreen.hidden = true;
+  score = 0;
+  goalCount = 0;
+  lives = 3;
+  updateHud();
+  if (keeperBodyEl) keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
+  setKeeperHead(KEEPER_HEAD);
+  if (ballEl) ballEl.hidden = false;
+  resetBall(false);
+}
+
+function quitToMenu() {
+  gameOver = false;
+  clearInterval(keeperWinTimer);
+  keeperWinTimer = null;
+  clearTimeout(keeperCelebrateTimer);
+  clearTimeout(keeperHeadTimer);
+  keeperCelebrating = false;
+  if (loseScreen) loseScreen.hidden = true;
+  if (teamsPanel) teamsPanel.hidden = true;
+  if (ballEl) {
+    ballEl.hidden = false;
+    ballEl.style.opacity = "1";
+  }
+  hideGhost();
+  if (keeperBodyEl) keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
+  if (keeperHeadEl) keeperHeadEl.src = KEEPER_HEAD;
+  score = 0;
+  goalCount = 0;
+  lives = 3;
+  state = "idle";
+  game.hidden = true;
+  menu.hidden = false;
+}
+
+function bindPress(btn) {
+  if (!btn) return;
+  btn.addEventListener("pointerdown", () => btn.classList.add("is-pressed"));
+  btn.addEventListener("pointerup", () => btn.classList.remove("is-pressed"));
+  btn.addEventListener("pointerleave", () => btn.classList.remove("is-pressed"));
+}
+
+let selectedTeam = "fr";
+
+function updateHudTeamFlag() {
+  if (!hudTeamFlag) return;
+  hudTeamFlag.className = `flag flag--${selectedTeam}`;
+}
+
+function selectTeam(btn) {
+  if (!btn) return;
+  document.querySelectorAll(".team").forEach((el) => {
+    el.classList.remove("is-selected");
+    el.setAttribute("aria-selected", "false");
+  });
+  btn.classList.add("is-selected");
+  btn.setAttribute("aria-selected", "true");
+  selectedTeam = btn.dataset.team || "fr";
+  updateHudTeamFlag();
+  if (teamsPanel) teamsPanel.hidden = true;
+}
+
+function toggleTeamsPanel() {
+  if (!teamsPanel) return;
+  teamsPanel.hidden = !teamsPanel.hidden;
+}
+
+const teamGrid = document.getElementById("teamGrid");
+if (teamGrid) {
+  teamGrid.querySelectorAll(".team").forEach((btn) => {
+    bindPress(btn);
+    btn.addEventListener("click", () => selectTeam(btn));
+  });
+}
+
+bindPress(startBtn);
+bindPress(teamPickBtn);
+bindPress(replayBtn);
+bindPress(quitBtn);
+
+if (teamPickBtn) {
+  teamPickBtn.addEventListener("click", () => toggleTeamsPanel());
+}
+
+if (teamsPanel) {
+  teamsPanel.addEventListener("click", (e) => {
+    if (e.target === teamsPanel) teamsPanel.hidden = true;
+  });
+}
 
 startBtn.addEventListener("click", () => {
+  if (teamsPanel) teamsPanel.hidden = true;
   menu.hidden = true;
   game.hidden = false;
+  updateHudTeamFlag();
   requestAnimationFrame(() => {
     layout();
+    buildPions();
     score = 0;
     goalCount = 0;
     lives = 3;
+    gameOver = false;
     updateHud();
     resetBall(false);
     lastT = performance.now();
     requestAnimationFrame(loop);
   });
 });
+
+if (replayBtn) {
+  replayBtn.addEventListener("click", () => {
+    replayGame();
+  });
+}
+
+if (quitBtn) {
+  quitBtn.addEventListener("click", () => {
+    quitToMenu();
+  });
+}
 
 window.addEventListener("resize", () => {
   if (game.hidden) return;
@@ -237,6 +428,15 @@ function layout() {
 }
 
 function resetBall(animate, durMs) {
+  if (gameOver) {
+    state = "idle";
+    if (ballEl) {
+      ballEl.hidden = true;
+      ballEl.style.opacity = "0";
+    }
+    hideGhost();
+    return;
+  }
   vx = 0;
   vy = 0;
   patX = 0;
@@ -254,6 +454,11 @@ function resetBall(animate, durMs) {
     state = "idle";
     x = homeX;
     y = homeY;
+    ballSpin = 0;
+    spinVel = 0;
+    flightSpin = 0;
+    hasSpinAng = false;
+    ballEl.hidden = false;
     ballEl.style.opacity = "1";
     setBallRing(true);
     render();
@@ -267,6 +472,7 @@ function resetBall(animate, durMs) {
   const fromY = game.clientHeight + BALL_SIZE * 0.6;
   const toY = homeY;
   y = fromY;
+  ballEl.hidden = false;
   ballEl.style.opacity = "0";
   render();
 
@@ -275,7 +481,7 @@ function resetBall(animate, durMs) {
   const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
   function slide(now) {
-    if (state !== "respawning") return;
+    if (gameOver || state !== "respawning") return;
     const t = clamp((now - t0) / dur, 0, 1);
     const e = easeOut(t);
     y = fromY + (toY - fromY) * e;
@@ -304,12 +510,10 @@ function updateHud() {
 
 function loseLife() {
   lives = Math.max(0, lives - 1);
-  if (lives <= 0) {
-    score = 0;
-    goalCount = 0;
-    lives = 3;
-  }
   updateHud();
+  if (lives <= 0) {
+    showGameOver();
+  }
 }
 
 function addScore() {
@@ -323,7 +527,72 @@ function stopOnGoal(zone) {
   bounceCage();
   addScore();
   showGoalMarker();
+  playKeeperAnxiousHead();
+  frenzyPions();
   beginGroundBounce(true);
+}
+
+const PION_FRENZY_RATE = 4.2;
+let pionRate = 1;
+let pionRaf = 0;
+let pionLast = 0;
+/** @type {{ el: HTMLElement, phase: number, period: number, amp: number }[]} */
+const pionData = [];
+
+function buildPions() {
+  const wrap = document.getElementById("pionsEl") || document.querySelector(".pions");
+  if (!wrap) return;
+  const srcs = [
+    "pion_01.png", "pion_02.png", "pion_03.png",
+    "pion_04.png", "pion_05.png", "pion_06.png",
+  ];
+  wrap.innerHTML = "";
+  pionData.length = 0;
+  const count = 48;
+  for (let i = 0; i < count; i++) {
+    const img = document.createElement("img");
+    img.className = "pion";
+    img.src = srcs[i % srcs.length];
+    img.alt = "";
+    img.draggable = false;
+    const period = 0.42 + Math.random() * 0.24;
+    const amp = -(7 + Math.floor(Math.random() * 9));
+    const x = (4 + Math.random() * 92).toFixed(2);
+    img.style.setProperty("--x", `${x}%`);
+    wrap.appendChild(img);
+    pionData.push({
+      el: img,
+      phase: Math.random() * Math.PI * 2,
+      period,
+      amp,
+    });
+  }
+  startPionBounce();
+}
+
+function startPionBounce() {
+  cancelAnimationFrame(pionRaf);
+  pionLast = performance.now();
+  const tick = (now) => {
+    const dt = Math.min(0.05, (now - pionLast) / 1000);
+    pionLast = now;
+    for (let i = 0; i < pionData.length; i++) {
+      const p = pionData[i];
+      p.phase += (Math.PI * dt * pionRate) / p.period;
+      const y = p.amp * (0.5 - 0.5 * Math.cos(p.phase));
+      p.el.style.transform = `translateX(-50%) translateY(${y}px)`;
+    }
+    pionRaf = requestAnimationFrame(tick);
+  };
+  pionRaf = requestAnimationFrame(tick);
+}
+
+function frenzyPions() {
+  pionRate = PION_FRENZY_RATE;
+  clearTimeout(frenzyPions._t);
+  frenzyPions._t = setTimeout(() => {
+    pionRate = 1;
+  }, 500);
 }
 
 function stopOnGreen() {
@@ -394,7 +663,7 @@ function updateSideExit(dt) {
 
 function isPastSideLimit(px = x, py = y) {
   const w = game.clientWidth;
-  const margin = w * SIDE_MARGIN;
+  const margin = w * SIDE_OUT_MARGIN;
   const scale = depthScale(py);
   const r = (BALL_SIZE / 2) * scale * 0.85;
   return px - r < margin || px + r > w - margin;
@@ -414,8 +683,9 @@ function stopOnVoid() {
 
 function scheduleRecover() {
   clearTimeout(recoverTimer);
+  if (gameOver) return;
   recoverTimer = setTimeout(() => {
-    if (state === "idle" || state === "respawning" || state === "aiming") return;
+    if (gameOver || state === "idle" || state === "respawning" || state === "aiming") return;
     resetBall(true, 130);
   }, RECOVER_DELAY);
 }
@@ -425,7 +695,7 @@ function pitchFloorY() {
 }
 
 function renderGhost() {
-  ghostEl.style.transform = ballTransform(gx, gy);
+  ghostEl.style.transform = ballTransform(gx, gy, undefined, 0);
   ghostPatternEl.style.transform = `translate(calc(-50% + ${gpatX}px), calc(-50% + ${gpatY}px))`;
 }
 
@@ -438,6 +708,7 @@ function hideGhost() {
 
 /** Fantôme : saut + sol 1s ; balle joueur revient à 0.3s */
 function beginGroundBounce(fromCage) {
+  if (gameOver) return;
   gx = x;
   gy = y;
   gpatX = patX;
@@ -514,9 +785,10 @@ function depthScale(py) {
   return SCALE_NEAR + (SCALE_FAR - SCALE_NEAR) * eased;
 }
 
-function ballTransform(px, py, scale) {
+function ballTransform(px, py, scale, rot = ballSpin) {
   const s = scale ?? depthScale(py);
-  return `translate3d(${px - BALL_SIZE / 2}px, ${py - BALL_SIZE / 2}px, 0) scale(${s})`;
+  const r = rot ?? 0;
+  return `translate3d(${px - BALL_SIZE / 2}px, ${py - BALL_SIZE / 2}px, 0) scale(${s}) rotate(${r}rad)`;
 }
 
 function wrapMesh(v) {
@@ -745,20 +1017,26 @@ function showGoalMarker() {
   goalMarker.style.fontSize = `${Math.max(16, size * 0.42)}px`;
   goalMarker.style.left = `${ball.left - wrap.left + ball.width / 2}px`;
   goalMarker.style.top = `${ball.top - wrap.top + ball.height / 2}px`;
-  goalMarker.style.background = "#ff1a1a";
+  goalMarker.style.background = "#e53935";
   goalMarker.style.border = "none";
   goalMarker.style.boxShadow = "none";
   goalMarker.style.opacity = "1";
+  goalMarker.style.visibility = "visible";
   clearTimeout(showGoalMarker._t1);
   clearTimeout(showGoalMarker._t2);
   showGoalMarker._t1 = setTimeout(() => {
     goalMarker.classList.add("is-fade");
+    goalMarker.style.opacity = "0";
     showGoalMarker._t2 = setTimeout(() => {
       goalMarker.hidden = true;
       goalMarker.classList.remove("is-fade");
       goalMarker.textContent = "";
-    }, 300);
-  }, 1000);
+      goalMarker.style.visibility = "hidden";
+      goalMarker.style.background = "transparent";
+      goalMarker.style.width = "0";
+      goalMarker.style.height = "0";
+    }, 150);
+  }, 500);
 }
 
 function bounceFloor() {
@@ -834,7 +1112,9 @@ function applyPowerAim(dt) {
   const progress = clamp((throwStartY - y) / denom, 0, 1);
   const boost = targetZone === ZONE.violet ? 1.15 : targetZone === ZONE.blue ? 0.85 : 0.65;
   const pullY = (0.04 + progress * progress * (0.35 + shotPower * 0.45)) * boost;
-  const pullX = (0.03 + progress * progress * 0.28) * (0.5 + shotPower * 0.3);
+  const spinAmt = Math.abs(clamp(flightSpin, -CURVE_SPIN_MAX, CURVE_SPIN_MAX));
+  // moins de correction X si effet : laisse l’arc se former
+  const pullX = (0.03 + progress * progress * 0.28) * (0.5 + shotPower * 0.3) * (1 - Math.min(0.45, spinAmt * 0.1));
 
   x += (targetX - x) * Math.min(1, pullX * dt * 6);
   y += (targetY - y) * Math.min(1, pullY * dt * (7 + shotPower * 6));
@@ -849,7 +1129,7 @@ function applyPowerAim(dt) {
 }
 
 game.addEventListener("pointerdown", (e) => {
-  if (state !== "idle") return;
+  if (gameOver || state !== "idle") return;
   const p = localPoint(e);
   if (!hitBall(p.x, p.y)) return;
   pointerId = e.pointerId;
@@ -857,6 +1137,9 @@ game.addEventListener("pointerdown", (e) => {
   state = "aiming";
   samples = [p];
   lastAim = p;
+  spinVel = 0;
+  hasSpinAng = false;
+  lastSpinAng = 0;
 });
 
 game.addEventListener("pointermove", (e) => {
@@ -864,14 +1147,37 @@ game.addEventListener("pointermove", (e) => {
   const p = localPoint(e);
   samples.push(p);
   if (samples.length > 8) samples.shift();
+
+  const ang = Math.atan2(p.y - y, p.x - x);
+  const dist = Math.hypot(p.x - x, p.y - y);
+  if (hasSpinAng && dist > 10) {
+    let dAng = ang - lastSpinAng;
+    dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
+    ballSpin += dAng * 0.45;
+    spinVel += dAng * 5.5;
+    spinVel = clamp(spinVel, -CURVE_SPIN_MAX, CURVE_SPIN_MAX);
+    patX = wrapMesh(patX + dAng * 12);
+    patY = wrapMesh(patY + Math.abs(dAng) * 4);
+  }
+  if (dist > 6) {
+    lastSpinAng = ang;
+    hasSpinAng = true;
+  }
+
   if (lastAim) {
-    patX = wrapMesh(patX + (p.x - lastAim.x) * ROLL_GAIN);
-    patY = wrapMesh(patY + (p.y - lastAim.y) * ROLL_GAIN);
+    const dx = p.x - lastAim.x;
+    const dy = p.y - lastAim.y;
+    patX = wrapMesh(patX + dx * ROLL_GAIN * 0.45);
+    patY = wrapMesh(patY + dy * ROLL_GAIN * 0.45);
+    ballSpin += (dx * 0.004 - dy * 0.0025);
   }
   lastAim = p;
-  x = clamp(p.x, game.clientWidth * SIDE_MARGIN + BALL_SIZE * 0.2, game.clientWidth * (1 - SIDE_MARGIN) - BALL_SIZE * 0.2);
-  // Large zone vers le bas pour prendre de l'élan
-  y = clamp(p.y, nearY - 50, Math.min(game.clientHeight - BALL_SIZE * 0.35, nearY + game.clientHeight * 0.28));
+
+  // suivi souple : le doigt peut tourner autour pendant que le ballon suit
+  const tx = clamp(p.x, game.clientWidth * SIDE_MARGIN + BALL_SIZE * 0.2, game.clientWidth * (1 - SIDE_MARGIN) - BALL_SIZE * 0.2);
+  const ty = clamp(p.y, nearY - 50, Math.min(game.clientHeight - BALL_SIZE * 0.35, nearY + game.clientHeight * 0.28));
+  x += (tx - x) * 0.42;
+  y += (ty - y) * 0.42;
   render();
 });
 
@@ -879,6 +1185,7 @@ function endAim(e) {
   if (state !== "aiming" || e.pointerId !== pointerId) return;
   pointerId = null;
   lastAim = null;
+  hasSpinAng = false;
 
   // Fenêtre courte = vraie vitesse du flick (doigt/souris)
   const recent = samples.slice(-4);
@@ -919,6 +1226,14 @@ function endAim(e) {
   floorBounceLock = false;
   leftGround = false;
   ignoreFloorUntil = 0;
+  const rawSpin = clamp(spinVel, -CURVE_SPIN_MAX, CURVE_SPIN_MAX);
+  if (Math.abs(rawSpin) <= CURVE_DEADZONE) {
+    flightSpin = 0;
+  } else {
+    const sign = rawSpin < 0 ? -1 : 1;
+    flightSpin = sign * (Math.abs(rawSpin) - CURVE_DEADZONE);
+  }
+  spinVel = 0;
   render();
   prevBgZone = probeBgZone();
   state = "flying";
@@ -936,6 +1251,15 @@ function loop(now) {
 
   updateKeeper(dt);
 
+  if (state === "aiming") {
+    if (Math.abs(spinVel) > 0.002) {
+      ballSpin += spinVel * dt * 0.35;
+      patX = wrapMesh(patX + spinVel * dt * 6);
+      spinVel *= Math.pow(0.06, dt);
+      render();
+    }
+  }
+
   if (state === "flying") {
     prevX = x;
     prevY = y;
@@ -947,6 +1271,19 @@ function loop(now) {
     for (let s = 0; s < steps; s++) {
       vx *= Math.pow(DRAG, sdt * 60);
       vy *= Math.pow(DRAG, sdt * 60);
+      if (Math.abs(flightSpin) > 0.015) {
+        // arc : on fait pivoter progressivement la direction du tir
+        const spd = Math.hypot(vx, vy);
+        if (spd > 8) {
+          const ang = Math.atan2(vy, vx);
+          const turn = flightSpin * CURVE_TURN * sdt;
+          const na = ang + turn;
+          vx = Math.cos(na) * spd;
+          vy = Math.sin(na) * spd;
+        }
+        ballSpin += flightSpin * sdt * 0.7;
+        flightSpin *= Math.pow(0.988, sdt * 60);
+      }
       x += vx * sdt;
       y += vy * sdt;
       applyPowerAim(sdt);

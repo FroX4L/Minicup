@@ -9,25 +9,60 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=84" />
 </head>
 <body>
   <main class="screen" id="menu">
-    <div class="glow glow-a" aria-hidden="true"></div>
-    <div class="glow glow-b" aria-hidden="true"></div>
-    <div class="pitch" aria-hidden="true"></div>
+    <img class="menu-bg" src="bg.png" alt="" draggable="false" />
 
     <header class="brand">
       <div class="logo" aria-hidden="true">
-        <span class="logo-ball"></span>
+        <img class="logo-ball" src="ball.png" alt="" draggable="false" />
       </div>
       <h1>Mini Cup</h1>
-      <p>Prêt pour le match&nbsp;?</p>
     </header>
 
-    <button type="button" class="start" id="startBtn">
-      <span>Démarrer</span>
-    </button>
+    <div class="menu-actions">
+      <button type="button" class="start" id="startBtn">
+        <span>Démarrer</span>
+      </button>
+      <button type="button" class="start start--alt" id="teamPickBtn">
+        <span>Choix équipe</span>
+      </button>
+    </div>
+
+    <section class="teams" id="teamsPanel" hidden aria-label="Choix d'équipe">
+      <h2 class="teams-title">Choisir une équipe</h2>
+      <div class="team-grid" id="teamGrid" role="listbox" aria-label="Équipes">
+        <button type="button" class="team is-selected" role="option" aria-selected="true" data-team="fr" aria-label="France">
+          <span class="flag flag--fr" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="team" role="option" aria-selected="false" data-team="ma" aria-label="Maroc">
+          <span class="flag flag--ma" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="team" role="option" aria-selected="false" data-team="es" aria-label="Espagne">
+          <span class="flag flag--es" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="team" role="option" aria-selected="false" data-team="ar" aria-label="Argentine">
+          <span class="flag flag--ar" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="team" role="option" aria-selected="false" data-team="dz" aria-label="Algérie">
+          <span class="flag flag--dz" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="team" role="option" aria-selected="false" data-team="it" aria-label="Italie">
+          <span class="flag flag--it" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="team" role="option" aria-selected="false" data-team="us" aria-label="USA">
+          <span class="flag flag--us" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="team" role="option" aria-selected="false" data-team="en" aria-label="Angleterre">
+          <span class="flag flag--en" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="team" role="option" aria-selected="false" data-team="no" aria-label="Norvège">
+          <span class="flag flag--no" aria-hidden="true"></span>
+        </button>
+      </div>
+    </section>
   </main>
 
   <section class="game" id="game" hidden>
@@ -37,11 +72,23 @@
         <img class="hud-ball is-on" data-life="1" src="ball.png" alt="" draggable="false" />
         <img class="hud-ball is-on" data-life="2" src="ball.png" alt="" draggable="false" />
       </div>
-      <div class="hud-score" aria-label="Score"><span id="scoreVal">0</span></div>
+    </div>
+    <button type="button" class="quit-x" id="quitBtn" aria-label="Quitter">
+      <span aria-hidden="true">✕</span>
+    </button>
+    <div class="hud-score" aria-label="Score"><span id="scoreVal">0</span></div>
+    <div class="hud-team" id="hudTeam" aria-label="Équipe">
+      <span class="flag flag--fr" id="hudTeamFlag" aria-hidden="true"></span>
     </div>
 
     <img class="game-bg" src="bg.png" alt="" draggable="false" />
     <img class="game-bg hitbox-bg" id="hitboxBg" src="hitbox_bg.png" alt="" draggable="false" />
+
+    <div class="tribunes" aria-hidden="true">
+      <img class="tribune tribune-02" src="tribune_02.png" alt="" draggable="false" />
+      <div class="pions" id="pionsEl"></div>
+      <img class="tribune tribune-01" src="tribune_01.png" alt="" draggable="false" />
+    </div>
 
     <div class="goal-area" id="goalArea">
       <div class="cage-wrap">
@@ -138,9 +185,15 @@
         </div>
       </div>
     </div>
+    <div class="lose" id="loseScreen" hidden>
+      <h2 class="lose-title">Perdu!</h2>
+      <button type="button" class="start" id="replayBtn">
+        <span>Rejouer</span>
+      </button>
+    </div>
   </section>
 
-  <script src="app.js?v=59"></script>
+  <script src="app.js?v=86"></script>
   <!-- Logique jeu / hitbox : app.js (pas dans ce fichier HTML) -->
 </body>
 </html>
