@@ -40,17 +40,17 @@ const POWER_SPAN = 1550;
 const MESH_TILE = 46;
 const RESET_DELAY = 900;
 const ROLL_GAIN = 0.55;
-const CURVE_SPIN_MAX = 8.5;
+const CURVE_SPIN_MAX = 7;
 /** en dessous : pas de déviation (tir quasi droit / spin accidentel) */
 const CURVE_DEADZONE = 2.75;
 /** ignore les micro-rotations du doigt en visant */
 const SPIN_ACCUM_MIN = 0.085;
 /** gain par radian tourné autour du ballon */
-const SPIN_GAIN = 5.2;
+const SPIN_GAIN = 3.2;
 /** décroissance pendant la visée (un peu d’inertie, pas trop) */
 const SPIN_AIM_DECAY = 0.28;
 /** rad/s de courbure de trajectoire (arc) */
-const CURVE_TURN = 1.05;
+const CURVE_TURN = 0.85;
 /** décroissance du spin en vol */
 const CURVE_FLIGHT_DECAY = 0.993;
 const FLIGHT_ROLL = 0.085;
@@ -1723,11 +1723,11 @@ game.addEventListener("pointermove", (e) => {
     let dAng = ang - lastSpinAng;
     dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
     if (Math.abs(dAng) >= SPIN_ACCUM_MIN) {
-      ballSpin += dAng * 0.45;
+      ballSpin += dAng * 0.32;
       spinVel += dAng * SPIN_GAIN;
       spinVel = clamp(spinVel, -CURVE_SPIN_MAX, CURVE_SPIN_MAX);
-      patX = wrapMesh(patX + dAng * 10);
-      patY = wrapMesh(patY + Math.abs(dAng) * 3.5);
+      patX = wrapMesh(patX + dAng * 7);
+      patY = wrapMesh(patY + Math.abs(dAng) * 2.5);
     }
   }
   if (dist > 10) {
@@ -1807,7 +1807,7 @@ function endAim(e) {
     const sign = rawSpin < 0 ? -1 : 1;
     const excess = Math.abs(rawSpin) - CURVE_DEADZONE;
     // plusieurs tours → un peu plus de courbe, sans exploser
-    flightSpin = sign * (excess + excess * excess * 0.04);
+    flightSpin = sign * (excess + excess * excess * 0.025);
   }
   spinVel = 0;
   crowdHelpUsed = false;
