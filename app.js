@@ -363,8 +363,9 @@ function updateKeeper(dt) {
 function bounceKeeperPart(el, className) {
   if (!el) return;
   el.classList.remove(className);
-  void el.offsetWidth;
-  el.classList.add(className);
+  requestAnimationFrame(() => {
+    el.classList.add(className);
+  });
 }
 
 function bounceKeeperHead() {
@@ -437,6 +438,8 @@ function startLoseSequence() {
   gameOver = true;
   state = "idle";
   recordTeamScore(score);
+  flushTeamScores();
+  renderTeamScores();
   clearTimeout(keeperCelebrateTimer);
   clearTimeout(keeperHeadTimer);
   clearTimeout(recoverTimer);
@@ -647,6 +650,8 @@ function replayGame() {
 function quitToMenu() {
   gameOver = false;
   recordTeamScore(score);
+  flushTeamScores();
+  renderTeamScores();
   clearLoseSequenceTimers();
   clearInterval(keeperWinTimer);
   keeperWinTimer = null;
@@ -815,10 +820,17 @@ function saveTeamScores(data) {
 }
 
 let teamBestScores = loadTeamScores();
+let teamScoresDirty = false;
 
 function getTeamBest(id) {
   const n = Number(teamBestScores[id]);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function flushTeamScores() {
+  if (!teamScoresDirty) return;
+  teamScoresDirty = false;
+  saveTeamScores(teamBestScores);
 }
 
 function recordTeamScore(value) {
@@ -826,15 +838,24 @@ function recordTeamScore(value) {
   const v = Math.max(0, Math.floor(value || 0));
   if (v <= getTeamBest(id)) return false;
   teamBestScores[id] = v;
-  saveTeamScores(teamBestScores);
-  renderTeamScores();
+  teamScoresDirty = true;
   return true;
+}
+
+const teamScoreEls = {};
+function cacheTeamScoreEls() {
+  TEAM_IDS.forEach((id) => {
+    teamScoreEls[id] = document.querySelector(`[data-team-score="${id}"]`);
+  });
 }
 
 function renderTeamScores() {
   TEAM_IDS.forEach((id) => {
-    const el = document.querySelector(`[data-team-score="${id}"]`);
-    if (el) el.textContent = String(getTeamBest(id));
+    const el = teamScoreEls[id] || document.querySelector(`[data-team-score="${id}"]`);
+    if (el) {
+      teamScoreEls[id] = el;
+      el.textContent = String(getTeamBest(id));
+    }
   });
 }
 
@@ -888,7 +909,13 @@ if (teamGrid) {
   }
 }
 renderTeamScores();
+cacheTeamScoreEls();
 updateHudTeamFlag();
+
+window.addEventListener("pagehide", flushTeamScores);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushTeamScores();
+});
 
 bindPress(startBtn);
 bindPress(diffBtn);
@@ -1056,14 +1083,17 @@ function addScore() {
 
 function stopOnGoal(zone) {
   setBallRing(false);
-  bounceCage();
   addScore();
-  showGoalMarker();
-  playKeeperAnxiousHead();
-  frenzyPions();
-  playSfx("filet");
-  playSfx(`win${1 + Math.floor(Math.random() * 4)}`);
   beginGroundBounce(true, true);
+  // FX décalés d’1 frame → évite le freeze FPS au moment du but
+  requestAnimationFrame(() => {
+    showGoalMarker();
+    bounceCage();
+    playKeeperAnxiousHead();
+    frenzyPions();
+    playSfx("filet");
+    playSfx(`win${1 + Math.floor(Math.random() * 4)}`);
+  });
 }
 
 let pionWrapEl = null;
@@ -1100,7 +1130,7 @@ function buildPions() {
     "pion_04.png", "pion_05.png", "pion_06.png",
   ];
   wrap.innerHTML = "";
-  const count = 32;
+  const count = 24;
   for (let i = 0; i < count; i++) {
     const img = document.createElement("img");
     img.className = "pion";
@@ -1437,7 +1467,6 @@ function probeCageAtScreen(cx, cy) {
   const offsets = [
     [0, 0],
     [-half, -half], [half, -half], [-half, half], [half, half],
-    [-half, 0], [half, 0], [0, -half], [0, half],
   ];
 
   const hits = { red: 0, blue: 0, violet: 0, green: 0 };
@@ -1459,7 +1488,7 @@ function probeCageAtScreen(cx, cy) {
   if (wanted === "violet" && hits.violet >= 1) return "violet";
   if (wanted === "blue" && hits.blue >= 1) return "blue";
   if (wanted === "red" && hits.red >= 1) return "red";
-  if (hits.green >= 2) return "green";
+  if (hits.green >= 1) return "green";
   return "other";
 }
 
@@ -1505,7 +1534,6 @@ function probeKeeperAtScreen(cx, cy) {
   const offsets = [
     [0, 0],
     [-half, -half], [half, -half], [-half, half], [half, half],
-    [-half, 0], [half, 0], [0, -half], [0, half],
   ];
   const bodyMask = keeperBodyMasks[keeperFrame];
   if (!bodyMask && !keeperHeadMask) return false;
@@ -1556,18 +1584,24 @@ function probeBgZone() {
 }
 
 function bounceCage() {
+  if (!cageEl) return;
   cageEl.classList.remove("is-bounce");
-  void cageEl.offsetWidth;
-  cageEl.classList.add("is-bounce");
+  requestAnimationFrame(() => {
+    cageEl.classList.add("is-bounce");
+  });
 }
 
 function showGoalMarker() {
-  render();
-  const ball = ballEl.getBoundingClientRect();
-  const wrap = document.querySelector(".cage-wrap").getBoundingClientRect();
-  const size = Math.max(36, ball.width * 1.05);
-  const left = ball.left - wrap.left + ball.width / 2;
-  const top = ball.top - wrap.top + ball.height / 2;
+  if (!goalMarker) return;
+  const g = hitRects.game || game.getBoundingClientRect();
+  const wrapEl = document.querySelector(".cage-wrap");
+  if (!wrapEl) return;
+  const wrap = wrapEl.getBoundingClientRect();
+  const scale = depthScale(y);
+  const ballW = BALL_SIZE * scale;
+  const size = Math.max(36, ballW * 1.05);
+  const left = g.left + x - wrap.left;
+  const top = g.top + y - wrap.top;
   goalHits.push({ left, top, n: score });
   goalMarker.hidden = false;
   goalMarker.classList.remove("is-fade");
