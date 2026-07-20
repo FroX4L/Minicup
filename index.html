@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=106" />
+  <link rel="stylesheet" href="styles.css?v=107" />
 </head>
 <body>
   <main class="screen" id="menu">
@@ -79,6 +79,10 @@
           <span class="minigame-card__name">Course contre la montre</span>
           <span class="minigame-card__badge">Jouer</span>
         </button>
+        <button type="button" class="minigame-card" id="minigameDuel" role="listitem">
+          <span class="minigame-card__name">Duel</span>
+          <span class="minigame-card__badge">Jouer</span>
+        </button>
       </div>
     </section>
 
@@ -135,6 +139,18 @@
       <div class="hud-tt" id="ttHud" hidden>
         <div class="hud-tt__timer" id="ttTimer">30.0</div>
         <div class="hud-tt__goals" id="ttGoals">0/10</div>
+      </div>
+      <div class="hud-duel" id="duelHud" hidden>
+        <div class="hud-duel__row hud-duel__row--1">
+          <span class="hud-duel__tag">J1</span>
+          <span class="hud-duel__score" id="duelP1Score">0</span>
+          <span class="hud-duel__lives" id="duelP1Lives" aria-label="Vies J1"></span>
+        </div>
+        <div class="hud-duel__row hud-duel__row--2">
+          <span class="hud-duel__tag">J2</span>
+          <span class="hud-duel__score" id="duelP2Score">0</span>
+          <span class="hud-duel__lives" id="duelP2Lives" aria-label="Vies J2"></span>
+        </div>
       </div>
     </div>
     <div class="tt-banner" id="ttBanner" hidden aria-hidden="true"></div>
@@ -265,7 +281,7 @@
     </div>
   </section>
 
-  <script src="app.js?v=129"></script>
+  <script src="app.js?v=130"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {

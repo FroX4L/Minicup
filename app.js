@@ -33,9 +33,18 @@ const ttHud = document.getElementById("ttHud");
 const ttTimerEl = document.getElementById("ttTimer");
 const ttGoalsEl = document.getElementById("ttGoals");
 const ttBanner = document.getElementById("ttBanner");
+const duelHud = document.getElementById("duelHud");
+const duelP1ScoreEl = document.getElementById("duelP1Score");
+const duelP2ScoreEl = document.getElementById("duelP2Score");
+const duelP1LivesEl = document.getElementById("duelP1Lives");
+const duelP2LivesEl = document.getElementById("duelP2Lives");
 const minigameTimeTrialBtn = document.getElementById("minigameTimeTrial");
+const minigameDuelBtn = document.getElementById("minigameDuel");
 const hitboxBgImg = document.getElementById("hitboxBg");
 const hitboxCageImg = document.getElementById("hitboxCage");
+
+const DUEL_LIVES = 3;
+const DUEL_GOAL_WIN = 5;
 
 const BALL_SIZE = 118;
 const SCALE_NEAR = 1;
@@ -290,8 +299,12 @@ function beginTimeTrial() {
 }
 
 function syncModeHud() {
-  if (livesEl) livesEl.hidden = false;
+  if (livesEl) livesEl.hidden = playMode === "duel" || playMode === "timeTrial";
   if (ttHud) ttHud.hidden = playMode !== "timeTrial";
+  if (duelHud) duelHud.hidden = playMode !== "duel";
+  if (playMode === "timeTrial" && livesEl) livesEl.hidden = false;
+  clearDuelChrome();
+  if (playMode === "duel") applyDuelChrome();
 }
 
 function showTtBanner(text, ms = 1100) {
@@ -391,6 +404,118 @@ function updateTimeTrial(dt) {
     finishTimeTrial(false);
   }
 }
+
+function fillDuelLives(el, n) {
+  if (!el) return;
+  el.innerHTML = "";
+  for (let i = 0; i < DUEL_LIVES; i++) {
+    const img = document.createElement("img");
+    img.className = "hud-ball" + (i < n ? " is-on" : "");
+    img.src = "ball.png";
+    img.alt = "";
+    img.draggable = false;
+    el.appendChild(img);
+  }
+}
+
+function clearDuelChrome() {
+  if (!game) return;
+  game.classList.remove("is-duel-p1", "is-duel-p2");
+}
+
+function applyDuelChrome() {
+  if (!game || playMode !== "duel") return;
+  clearDuelChrome();
+  game.classList.add(duelTurn === 1 ? "is-duel-p1" : "is-duel-p2");
+}
+
+function beginDuel() {
+  warmAudio();
+  playMode = "duel";
+  duelTurn = 1;
+  duelPaused = false;
+  duelP1 = { goals: 0, lives: DUEL_LIVES };
+  duelP2 = { goals: 0, lives: DUEL_LIVES };
+  difficulty = "normal";
+  closeMinigamesPanel();
+  closeDiffPanel();
+  if (teamsPanel) teamsPanel.hidden = true;
+  menu.hidden = true;
+  game.hidden = false;
+  updateHudTeamFlag();
+  syncModeHud();
+  requestAnimationFrame(() => {
+    layout();
+    buildPions();
+    score = 0;
+    goalCount = 0;
+    lives = DUEL_LIVES;
+    gameOver = false;
+    resetGoalHits();
+    applyDuelChrome();
+    updateHud();
+    resetBall(false);
+    showTtBanner("Joueur 1 — bleu", 1400);
+    ensureLoop();
+  });
+}
+
+function currentDuelPlayer() {
+  return duelTurn === 1 ? duelP1 : duelP2;
+}
+
+function scheduleDuelPass() {
+  if (playMode !== "duel" || gameOver || duelPaused) return;
+  duelPaused = true;
+  clearTimeout(scheduleDuelPass._t);
+  scheduleDuelPass._t = setTimeout(() => {
+    if (playMode !== "duel" || gameOver) return;
+    duelTurn = duelTurn === 1 ? 2 : 1;
+    applyDuelChrome();
+    updateHud();
+    if (ballEl) {
+      ballEl.hidden = false;
+      ballEl.style.opacity = "1";
+    }
+    hideGhost();
+    resetBall(false);
+    showTtBanner(duelTurn === 1 ? "Passe → Joueur 1" : "Passe → Joueur 2", 1500);
+    clearTimeout(scheduleDuelPass._ready);
+    scheduleDuelPass._ready = setTimeout(() => {
+      duelPaused = false;
+    }, 700);
+  }, 850);
+}
+
+function finishDuel(winner) {
+  gameOver = true;
+  duelPaused = true;
+  state = "idle";
+  clearTimeout(scheduleDuelPass._t);
+  clearTimeout(scheduleDuelPass._ready);
+  clearTimeout(showTtBanner._t);
+  if (ttBanner) ttBanner.hidden = true;
+  if (ballEl) {
+    ballEl.hidden = true;
+    ballEl.style.opacity = "0";
+  }
+  hideGhost();
+  applyDuelChrome();
+  clearInterval(keeperWinTimer);
+  keeperWinTimer = null;
+  if (keeperBodyEl) keeperBodyEl.src = KEEPER_WIN[0];
+  if (keeperHeadEl) keeperHeadEl.src = KEEPER_HEAD_SMILE;
+  keeperWinTimer = setInterval(() => {
+    if (!gameOver || !keeperBodyEl) return;
+    keeperWinFrame = 1 - keeperWinFrame;
+    keeperBodyEl.src = KEEPER_WIN[keeperWinFrame];
+  }, KEEPER_WIN_MS);
+  if (loseScoreVal) {
+    loseScoreVal.textContent = `J${winner}  ${duelP1.goals}-${duelP2.goals}`;
+  }
+  if (loseScreen) loseScreen.hidden = false;
+  playSfx(`win${1 + Math.floor(Math.random() * 4)}`);
+}
 const KEEPER_BOB_PX = 3.5;
 const KEEPER_BASE_Y = 10; // descend un peu
 const KEEPER_BOUNCE_MS = 320;
@@ -474,6 +599,10 @@ let ttTimeLeft = 0;
 let ttGoalsHave = 0;
 let ttPaused = false;
 let ttSavedDiff = "normal";
+let duelTurn = 1;
+let duelPaused = false;
+let duelP1 = { goals: 0, lives: DUEL_LIVES };
+let duelP2 = { goals: 0, lives: DUEL_LIVES };
 let keeperWinFrame = 0;
 let keeperWinTimer = null;
 let keeperLaughing = false;
@@ -863,6 +992,10 @@ function replayGame() {
     beginTimeTrial();
     return;
   }
+  if (playMode === "duel") {
+    beginDuel();
+    return;
+  }
   score = 0;
   goalCount = 0;
   lives = 3;
@@ -886,9 +1019,13 @@ function quitToMenu() {
   }
   playMode = "classic";
   ttPaused = false;
+  duelPaused = false;
   clearTimeout(completeTtRound._t);
   clearTimeout(showTtBanner._t);
+  clearTimeout(scheduleDuelPass._t);
+  clearTimeout(scheduleDuelPass._ready);
   if (ttBanner) ttBanner.hidden = true;
+  clearDuelChrome();
   syncModeHud();
   clearLoseSequenceTimers();
   clearInterval(keeperWinTimer);
@@ -1237,6 +1374,11 @@ if (minigameTimeTrialBtn) {
   minigameTimeTrialBtn.addEventListener("click", () => beginTimeTrial());
 }
 
+if (minigameDuelBtn) {
+  bindPress(minigameDuelBtn);
+  minigameDuelBtn.addEventListener("click", () => beginDuel());
+}
+
 if (minigamesPanel) {
   minigamesPanel.addEventListener("click", (e) => {
     if (e.target === minigamesPanel) closeMinigamesPanel();
@@ -1383,6 +1525,17 @@ function resetBall(animate, durMs) {
 }
 
 function updateHud() {
+  if (playMode === "duel") {
+    if (duelP1ScoreEl) duelP1ScoreEl.textContent = String(duelP1.goals);
+    if (duelP2ScoreEl) duelP2ScoreEl.textContent = String(duelP2.goals);
+    fillDuelLives(duelP1LivesEl, duelP1.lives);
+    fillDuelLives(duelP2LivesEl, duelP2.lives);
+    document.querySelectorAll(".hud-duel__row").forEach((row) => {
+      row.classList.toggle("is-turn", row.classList.contains(`hud-duel__row--${duelTurn}`));
+    });
+    if (scoreValEl) scoreValEl.textContent = `${duelP1.goals}-${duelP2.goals}`;
+    return;
+  }
   if (playMode === "timeTrial") {
     if (ttTimerEl) {
       ttTimerEl.textContent = Math.max(0, ttTimeLeft).toFixed(1);
@@ -1408,6 +1561,17 @@ function updateHud() {
 }
 
 function loseLife() {
+  if (playMode === "duel") {
+    const p = currentDuelPlayer();
+    p.lives = Math.max(0, p.lives - 1);
+    updateHud();
+    if (p.lives <= 0) {
+      finishDuel(duelTurn === 1 ? 2 : 1);
+      return;
+    }
+    scheduleDuelPass();
+    return;
+  }
   lives = Math.max(0, lives - 1);
   updateHud();
   if (lives <= 0) {
@@ -1420,6 +1584,18 @@ function loseLife() {
 }
 
 function addScore() {
+  if (playMode === "duel") {
+    const p = currentDuelPlayer();
+    p.goals += 1;
+    goalCount += 1;
+    updateHud();
+    if (p.goals >= DUEL_GOAL_WIN) {
+      finishDuel(duelTurn);
+      return;
+    }
+    scheduleDuelPass();
+    return;
+  }
   score += 1;
   goalCount += 1;
   if (playMode === "timeTrial") {
@@ -2084,7 +2260,7 @@ function applyPowerAim(dt) {
 }
 
 game.addEventListener("pointerdown", (e) => {
-  if (gameOver || ttPaused || state !== "idle") return;
+  if (gameOver || ttPaused || duelPaused || state !== "idle") return;
   const p = localPoint(e);
   if (!hitBall(p.x, p.y)) return;
   pointerId = e.pointerId;
