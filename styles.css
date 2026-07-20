@@ -881,6 +881,66 @@ body {
   transform: scale(1);
 }
 
+.hud-tt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  pointer-events: none;
+}
+
+.hud-tt[hidden] {
+  display: none !important;
+}
+
+.hud-tt__timer {
+  font-family: "Outfit", sans-serif;
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #ffd54a;
+  -webkit-text-stroke: 1px #e8862a;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 #d46a14, 0 3px 8px rgba(0, 0, 0, 0.35);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.hud-tt__timer.is-low {
+  color: #e53935;
+  -webkit-text-stroke: 1px #8e1c1a;
+  text-shadow: 0 2px 0 #8e1c1a, 0 3px 8px rgba(0, 0, 0, 0.35);
+}
+
+.hud-tt__goals {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.tt-banner {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 38;
+  pointer-events: none;
+  padding: 0.65rem 1.1rem;
+  border-radius: 14px;
+  border: 3px solid #e8862a;
+  background: rgba(8, 28, 14, 0.82);
+  color: #ffd54a;
+  font-family: "Outfit", sans-serif;
+  font-size: clamp(1.15rem, 5vw, 1.55rem);
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 2px 0 #d46a14;
+  white-space: nowrap;
+}
+
+.tt-banner[hidden] {
+  display: none !important;
+}
+
 .hud-score {
   position: absolute;
   top: max(12px, env(safe-area-inset-top));

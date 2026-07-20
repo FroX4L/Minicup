@@ -29,6 +29,11 @@ const goalMarker = document.getElementById("goalMarker");
 const scoreValEl = document.getElementById("scoreVal");
 const scoreRecapEl = document.getElementById("scoreRecap");
 const livesEl = document.getElementById("livesEl");
+const ttHud = document.getElementById("ttHud");
+const ttTimerEl = document.getElementById("ttTimer");
+const ttGoalsEl = document.getElementById("ttGoals");
+const ttBanner = document.getElementById("ttBanner");
+const minigameTimeTrialBtn = document.getElementById("minigameTimeTrial");
 const hitboxBgImg = document.getElementById("hitboxBg");
 const hitboxCageImg = document.getElementById("hitboxCage");
 
@@ -221,12 +226,15 @@ function closeMinigamesPanel() {
 }
 
 function beginMatch() {
+  playMode = "classic";
   applyDiffSlider(true);
   closeDiffPanel();
+  closeMinigamesPanel();
   if (teamsPanel) teamsPanel.hidden = true;
   menu.hidden = true;
   game.hidden = false;
   updateHudTeamFlag();
+  syncModeHud();
   requestAnimationFrame(() => {
     layout();
     buildPions();
@@ -237,9 +245,150 @@ function beginMatch() {
     resetGoalHits();
     updateHud();
     resetBall(false);
-    lastT = performance.now();
-    requestAnimationFrame(loop);
+    ensureLoop();
   });
+}
+
+/** Manches chrono : base fixe + légère variation réaliste */
+function buildTimeTrialRounds() {
+  const jitter = (base, span) => {
+    const d = Math.floor(Math.random() * (span * 2 + 1)) - span;
+    return Math.max(8, base + d);
+  };
+  return [
+    { time: jitter(30, 1), goals: 10, diff: "normal" },
+    { time: jitter(25, 1), goals: 10, diff: "normal" },
+    { time: jitter(10, 0), goals: 5, diff: "hard" },
+  ];
+}
+
+function beginTimeTrial() {
+  warmAudio();
+  playMode = "timeTrial";
+  ttSavedDiff = difficulty;
+  ttRounds = buildTimeTrialRounds();
+  ttRoundIndex = 0;
+  ttPaused = false;
+  closeMinigamesPanel();
+  closeDiffPanel();
+  if (teamsPanel) teamsPanel.hidden = true;
+  menu.hidden = true;
+  game.hidden = false;
+  updateHudTeamFlag();
+  syncModeHud();
+  requestAnimationFrame(() => {
+    layout();
+    buildPions();
+    score = 0;
+    goalCount = 0;
+    lives = 3;
+    gameOver = false;
+    resetGoalHits();
+    startTtRound(true);
+    ensureLoop();
+  });
+}
+
+function syncModeHud() {
+  if (livesEl) livesEl.hidden = playMode === "timeTrial";
+  if (ttHud) ttHud.hidden = playMode !== "timeTrial";
+}
+
+function showTtBanner(text, ms = 1100) {
+  if (!ttBanner) return;
+  ttBanner.hidden = false;
+  ttBanner.textContent = text;
+  clearTimeout(showTtBanner._t);
+  showTtBanner._t = setTimeout(() => {
+    if (ttBanner) ttBanner.hidden = true;
+  }, ms);
+}
+
+function startTtRound(isFirst) {
+  const r = ttRounds[ttRoundIndex];
+  if (!r) return;
+  difficulty = r.diff;
+  ttTimeLeft = r.time;
+  ttGoalsHave = 0;
+  goalCount = 0;
+  ttPaused = false;
+  keeperX = 0.42 + Math.random() * 0.16;
+  keeperDir = Math.random() < 0.5 ? -1 : 1;
+  if (ballEl) {
+    ballEl.hidden = false;
+    ballEl.style.opacity = "1";
+  }
+  hideGhost();
+  if (keeperBodyEl) keeperBodyEl.src = KEEPER_FRAMES[keeperFrame];
+  setKeeperHead(KEEPER_HEAD, false);
+  resetBall(false);
+  updateHud();
+  const label = `Manche ${ttRoundIndex + 1} — ${r.goals} buts · ${r.time}s`;
+  showTtBanner(label, isFirst ? 1400 : 1200);
+}
+
+function completeTtRound() {
+  if (playMode !== "timeTrial" || ttPaused || gameOver) return;
+  ttPaused = true;
+  state = "idle";
+  vx = 0;
+  vy = 0;
+  if (ttRoundIndex >= ttRounds.length - 1) {
+    finishTimeTrial(true);
+    return;
+  }
+  showTtBanner("Manche suivante !", 900);
+  clearTimeout(completeTtRound._t);
+  completeTtRound._t = setTimeout(() => {
+    if (playMode !== "timeTrial" || gameOver) return;
+    ttRoundIndex += 1;
+    startTtRound(false);
+  }, 1000);
+}
+
+function finishTimeTrial(won) {
+  gameOver = true;
+  ttPaused = true;
+  state = "idle";
+  clearTimeout(completeTtRound._t);
+  clearTimeout(showTtBanner._t);
+  if (ttBanner) ttBanner.hidden = true;
+  if (ballEl) {
+    ballEl.hidden = true;
+    ballEl.style.opacity = "0";
+  }
+  hideGhost();
+  clearInterval(keeperWinTimer);
+  keeperWinTimer = null;
+  keeperWinFrame = 0;
+  if (keeperBodyEl) keeperBodyEl.src = won ? KEEPER_HIT : KEEPER_WIN[0];
+  if (keeperHeadEl) {
+    keeperHeadEl.src = won ? KEEPER_HEAD_ANXIOUS : KEEPER_HEAD_SMILE;
+  }
+  if (!won) {
+    keeperWinTimer = setInterval(() => {
+      if (!gameOver || !keeperBodyEl) return;
+      keeperWinFrame = 1 - keeperWinFrame;
+      keeperBodyEl.src = KEEPER_WIN[keeperWinFrame];
+    }, KEEPER_WIN_MS);
+  }
+  if (loseScoreVal) loseScoreVal.textContent = String(score);
+  if (loseScreen) loseScreen.hidden = false;
+  playSfx(won ? `win${1 + Math.floor(Math.random() * 4)}` : "lose");
+}
+
+function updateTimeTrial(dt) {
+  if (playMode !== "timeTrial" || gameOver || ttPaused) return;
+  ttTimeLeft -= dt;
+  if (ttTimerEl) {
+    const t = Math.max(0, ttTimeLeft);
+    ttTimerEl.textContent = t.toFixed(1);
+    ttTimerEl.classList.toggle("is-low", t <= 5);
+  }
+  if (ttTimeLeft <= 0) {
+    ttTimeLeft = 0;
+    finishTimeTrial(false);
+  }
 }
 const KEEPER_BOB_PX = 3.5;
 const KEEPER_BASE_Y = 10; // descend un peu
@@ -272,6 +421,7 @@ let homeY = 0;
 let nearY = 0;
 let farY = 0;
 let lastT = 0;
+let loopOn = false;
 let pointerId = null;
 let samples = [];
 let lastAim = null;
@@ -315,6 +465,14 @@ let keeperCelebrateTimer = null;
 let keeperHeadTimer = null;
 let keeperBounceAt = 0;
 let gameOver = false;
+let playMode = "classic";
+let ttRoundIndex = 0;
+/** @type {{ time: number, goals: number, diff: string }[]} */
+let ttRounds = [];
+let ttTimeLeft = 0;
+let ttGoalsHave = 0;
+let ttPaused = false;
+let ttSavedDiff = "normal";
 let keeperWinFrame = 0;
 let keeperWinTimer = null;
 let keeperLaughing = false;
@@ -691,12 +849,19 @@ function replayGame() {
   clearLoseSequenceTimers();
   clearInterval(keeperWinTimer);
   keeperWinTimer = null;
+  clearTimeout(completeTtRound._t);
+  clearTimeout(showTtBanner._t);
+  if (ttBanner) ttBanner.hidden = true;
   resetGoalHits();
   if (scoreRecapEl) {
     scoreRecapEl.hidden = true;
     scoreRecapEl.classList.remove("is-flash");
   }
   if (loseScreen) loseScreen.hidden = true;
+  if (playMode === "timeTrial") {
+    beginTimeTrial();
+    return;
+  }
   score = 0;
   goalCount = 0;
   lives = 3;
@@ -709,9 +874,21 @@ function replayGame() {
 
 function quitToMenu() {
   gameOver = false;
-  recordTeamScore(score);
-  flushTeamScores();
-  renderTeamScores();
+  if (playMode === "classic") {
+    recordTeamScore(score);
+    flushTeamScores();
+    renderTeamScores();
+  } else {
+    difficulty = ttSavedDiff;
+    const saved = loadSave("minicup-diff");
+    if (DIFF_ORDER.includes(saved)) difficulty = saved;
+  }
+  playMode = "classic";
+  ttPaused = false;
+  clearTimeout(completeTtRound._t);
+  clearTimeout(showTtBanner._t);
+  if (ttBanner) ttBanner.hidden = true;
+  syncModeHud();
   clearLoseSequenceTimers();
   clearInterval(keeperWinTimer);
   keeperWinTimer = null;
@@ -1054,6 +1231,11 @@ if (minigamesBtn) {
   minigamesBtn.addEventListener("click", () => openMinigamesPanel());
 }
 
+if (minigameTimeTrialBtn) {
+  bindPress(minigameTimeTrialBtn);
+  minigameTimeTrialBtn.addEventListener("click", () => beginTimeTrial());
+}
+
 if (minigamesPanel) {
   minigamesPanel.addEventListener("click", (e) => {
     if (e.target === minigamesPanel) closeMinigamesPanel();
@@ -1200,6 +1382,18 @@ function resetBall(animate, durMs) {
 }
 
 function updateHud() {
+  if (playMode === "timeTrial") {
+    if (ttTimerEl) {
+      ttTimerEl.textContent = Math.max(0, ttTimeLeft).toFixed(1);
+      ttTimerEl.classList.toggle("is-low", ttTimeLeft <= 5);
+    }
+    if (ttGoalsEl) {
+      const need = (ttRounds[ttRoundIndex] && ttRounds[ttRoundIndex].goals) || 0;
+      ttGoalsEl.textContent = `${ttGoalsHave}/${need}`;
+    }
+    if (scoreValEl) scoreValEl.textContent = String(score);
+    return;
+  }
   if (scoreValEl) scoreValEl.textContent = String(score);
   if (!livesEl) return;
   livesEl.querySelectorAll(".hud-ball").forEach((el, i) => {
@@ -1208,6 +1402,7 @@ function updateHud() {
 }
 
 function loseLife() {
+  if (playMode === "timeTrial") return;
   lives = Math.max(0, lives - 1);
   updateHud();
   if (lives <= 0) {
@@ -1218,6 +1413,15 @@ function loseLife() {
 function addScore() {
   score += 1;
   goalCount += 1;
+  if (playMode === "timeTrial") {
+    ttGoalsHave += 1;
+    updateHud();
+    const need = (ttRounds[ttRoundIndex] && ttRounds[ttRoundIndex].goals) || 99;
+    if (!ttPaused && !gameOver && ttGoalsHave >= need) {
+      completeTtRound();
+    }
+    return;
+  }
   updateHud();
   recordTeamScore(score);
 }
@@ -1871,7 +2075,7 @@ function applyPowerAim(dt) {
 }
 
 game.addEventListener("pointerdown", (e) => {
-  if (gameOver || state !== "idle") return;
+  if (gameOver || ttPaused || state !== "idle") return;
   const p = localPoint(e);
   if (!hitBall(p.x, p.y)) return;
   pointerId = e.pointerId;
@@ -1998,11 +2202,25 @@ function endAim(e) {
 game.addEventListener("pointerup", endAim);
 game.addEventListener("pointercancel", endAim);
 
+function ensureLoop() {
+  if (loopOn) {
+    lastT = performance.now();
+    return;
+  }
+  loopOn = true;
+  lastT = performance.now();
+  requestAnimationFrame(loop);
+}
+
 function loop(now) {
-  if (game.hidden) return;
+  if (game.hidden) {
+    loopOn = false;
+    return;
+  }
   const dt = Math.min(0.033, (now - lastT) / 1000);
   lastT = now;
 
+  updateTimeTrial(dt);
   updateKeeper(dt);
 
   if (state === "aiming") {
