@@ -290,7 +290,7 @@ function beginTimeTrial() {
 }
 
 function syncModeHud() {
-  if (livesEl) livesEl.hidden = playMode === "timeTrial";
+  if (livesEl) livesEl.hidden = false;
   if (ttHud) ttHud.hidden = playMode !== "timeTrial";
 }
 
@@ -1392,6 +1392,11 @@ function updateHud() {
       ttGoalsEl.textContent = `${ttGoalsHave}/${need}`;
     }
     if (scoreValEl) scoreValEl.textContent = String(score);
+    if (livesEl) {
+      livesEl.querySelectorAll(".hud-ball").forEach((el, i) => {
+        el.classList.toggle("is-on", i < lives);
+      });
+    }
     return;
   }
   if (scoreValEl) scoreValEl.textContent = String(score);
@@ -1402,11 +1407,14 @@ function updateHud() {
 }
 
 function loseLife() {
-  if (playMode === "timeTrial") return;
   lives = Math.max(0, lives - 1);
   updateHud();
   if (lives <= 0) {
-    showGameOver();
+    if (playMode === "timeTrial") {
+      finishTimeTrial(false);
+    } else {
+      showGameOver();
+    }
   }
 }
 
