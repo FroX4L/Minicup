@@ -1921,6 +1921,34 @@ function syncHitRects() {
   hitRects.keeper = keeperEl ? keeperEl.getBoundingClientRect() : null;
 }
 
+function isDuelFlipped() {
+  return playMode === "duel" && duelTurn === 2;
+}
+
+/** Coords jeu → écran (flip 180° pour J2) */
+function localToScreen(lx, ly, g) {
+  const rect = g || hitRects.game || game.getBoundingClientRect();
+  if (isDuelFlipped()) {
+    return {
+      x: rect.left + rect.width - lx,
+      y: rect.top + rect.height - ly,
+    };
+  }
+  return { x: rect.left + lx, y: rect.top + ly };
+}
+
+/** Coords écran → jeu */
+function screenToLocal(sx, sy, g) {
+  const rect = g || hitRects.game || game.getBoundingClientRect();
+  let lx = sx - rect.left;
+  let ly = sy - rect.top;
+  if (isDuelFlipped()) {
+    lx = rect.width - lx;
+    ly = rect.height - ly;
+  }
+  return { x: lx, y: ly };
+}
+
 function setBallRing(on) {
   ballEl.classList.toggle("show-ring", on);
 }
@@ -1931,7 +1959,13 @@ function clamp(v, a, b) {
 
 function localPoint(e) {
   const rect = game.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top, t: performance.now() };
+  let x = e.clientX - rect.left;
+  let y = e.clientY - rect.top;
+  if (isDuelFlipped()) {
+    x = rect.width - x;
+    y = rect.height - y;
+  }
+  return { x, y, t: performance.now() };
 }
 
 function hitBall(px, py) {
@@ -2014,8 +2048,14 @@ function probeCageAtScreen(cx, cy) {
     const px = cx + ox;
     const py = cy + oy;
     if (px < cage.left || px > cage.right || py < cage.top || py > cage.bottom) continue;
-    const mx = Math.floor(((px - cage.left) / cage.width) * CAGE_MASK_W);
-    const my = Math.floor(((py - cage.top) / cage.height) * CAGE_MASK_H);
+    let u = (px - cage.left) / cage.width;
+    let v = (py - cage.top) / cage.height;
+    if (isDuelFlipped()) {
+      u = 1 - u;
+      v = 1 - v;
+    }
+    const mx = Math.floor(u * CAGE_MASK_W);
+    const my = Math.floor(v * CAGE_MASK_H);
     const cell = maskAt(mx, my);
     // uniquement la vraie couleur — pas de fuzzy bleu→violet (sinon but sur le bleu)
     if (cell === ZONE.violet) hits.violet++;
@@ -2032,13 +2072,12 @@ function probeCageAtScreen(cx, cy) {
 }
 
 function probeCageZone() {
-  const g = hitRects.game || game.getBoundingClientRect();
-  return probeCageAtScreen(g.left + x, g.top + y);
+  const s = localToScreen(x, y);
+  return probeCageAtScreen(s.x, s.y);
 }
 
 /** Balayage prev→current pour ne pas sauter la zone à haute vitesse */
 function probeCageSwept() {
-  const g = hitRects.game || game.getBoundingClientRect();
   const dist = Math.hypot(x - prevX, y - prevY);
   const steps = Math.max(1, Math.ceil(dist / 5));
   let found = "other";
@@ -2047,7 +2086,8 @@ function probeCageSwept() {
     const t = i / steps;
     const sx = prevX + (x - prevX) * t;
     const sy = prevY + (y - prevY) * t;
-    const z = probeCageAtScreen(g.left + sx, g.top + sy);
+    const scr = localToScreen(sx, sy);
+    const z = probeCageAtScreen(scr.x, scr.y);
     if (z === wanted) return z;
     if (z === "green") found = "green";
   }
@@ -2084,9 +2124,14 @@ function probeKeeperAtScreen(cx, cy) {
     const py = cy + oy;
     if (px < rect.left || px > rect.right || py < rect.top || py > rect.bottom) continue;
     let u = (px - rect.left) / rect.width;
+    let v = (py - rect.top) / rect.height;
+    if (isDuelFlipped()) {
+      u = 1 - u;
+      v = 1 - v;
+    }
     if (keeperDir > 0) u = 1 - u;
     const mx = Math.floor(u * mw);
-    const my = Math.floor(((py - rect.top) / rect.height) * mh);
+    const my = Math.floor(v * mh);
     if (keeperAlphaAt(mx, my, bodyMask) || keeperAlphaAt(mx, my, keeperHeadMask)) hits++;
   }
   const cfg = diffCfg();
@@ -2099,14 +2144,14 @@ function probeKeeperAtScreen(cx, cy) {
 }
 
 function probeKeeperSwept() {
-  const g = hitRects.game || game.getBoundingClientRect();
   const dist = Math.hypot(x - prevX, y - prevY);
   const steps = Math.max(1, Math.ceil(dist / 5));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const sx = prevX + (x - prevX) * t;
     const sy = prevY + (y - prevY) * t;
-    if (probeKeeperAtScreen(g.left + sx, g.top + sy)) return true;
+    const scr = localToScreen(sx, sy);
+    if (probeKeeperAtScreen(scr.x, scr.y)) return true;
   }
   return false;
 }
@@ -2114,7 +2159,8 @@ function probeKeeperSwept() {
 function probeBgZone() {
   const g = hitRects.game || game.getBoundingClientRect();
   const bg = hitRects.bg || hitboxBgImg.getBoundingClientRect();
-  const cy = g.top + y;
+  const scr = localToScreen(x, y, g);
+  const cy = scr.y;
   if (bg.height < 2) return "other";
   const t = (cy - bg.top) / bg.height;
   if (t <= BG_RED_BOT) return "red";
@@ -2229,8 +2275,11 @@ function applyPowerAim(dt) {
   if (cage.height < 2) return;
   const cfg = diffCfg();
 
-  const targetX = (cage.left - g.left) + ((targetMaskX + 0.5) / CAGE_MASK_W) * cage.width;
-  const targetY = (cage.top - g.top) + ((targetMaskY + 0.5) / CAGE_MASK_H) * cage.height;
+  const screenTX = cage.left + ((targetMaskX + 0.5) / CAGE_MASK_W) * cage.width;
+  const screenTY = cage.top + ((targetMaskY + 0.5) / CAGE_MASK_H) * cage.height;
+  const localT = screenToLocal(screenTX, screenTY, g);
+  const targetX = localT.x;
+  const targetY = localT.y;
 
   const denom = Math.max(40, throwStartY - targetY);
   const progress = clamp((throwStartY - y) / denom, 0, 1);
