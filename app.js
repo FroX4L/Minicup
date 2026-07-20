@@ -258,24 +258,42 @@ function beginMatch() {
   });
 }
 
-/** Manches chrono : base fixe + légère variation réaliste */
-function buildTimeTrialRounds() {
+/** Manches chrono infinies — 3 premières fixes, ensuite procédural */
+function makeTtRound(index) {
   const jitter = (base, span) => {
     const d = Math.floor(Math.random() * (span * 2 + 1)) - span;
-    return Math.max(8, base + d);
+    return Math.max(5, base + d);
   };
-  return [
-    { time: jitter(30, 1), goals: 10, diff: "normal" },
-    { time: jitter(25, 1), goals: 10, diff: "normal" },
-    { time: jitter(10, 0), goals: 5, diff: "hard" },
-  ];
+  if (index === 0) return { time: jitter(30, 1), goals: 10, diff: "normal" };
+  if (index === 1) return { time: jitter(25, 1), goals: 10, diff: "normal" };
+  if (index === 2) return { time: jitter(10, 0), goals: 5, diff: "hard" };
+
+  // Manche 4+ : plus court, buts variables, gardien difficile
+  const baseTime = Math.max(6, 13 - Math.floor((index - 2) * 0.7));
+  let time = jitter(baseTime, 1);
+  let goals = 5 + Math.floor(Math.random() * 6); // 5–10
+  if (time <= 8) goals = Math.min(goals, 6);
+  if (time >= 11 && Math.random() < 0.35) goals = Math.max(goals, 8);
+  // parfois une manche “sprint”
+  if (Math.random() < 0.2) {
+    time = jitter(7, 1);
+    goals = 4 + Math.floor(Math.random() * 3);
+  }
+  return { time, goals, diff: "hard" };
+}
+
+function ensureTtRound(index) {
+  while (ttRounds.length <= index) {
+    ttRounds.push(makeTtRound(ttRounds.length));
+  }
+  return ttRounds[index];
 }
 
 function beginTimeTrial() {
   warmAudio();
   playMode = "timeTrial";
   ttSavedDiff = difficulty;
-  ttRounds = buildTimeTrialRounds();
+  ttRounds = [];
   ttRoundIndex = 0;
   ttPaused = false;
   closeMinigamesPanel();
@@ -318,7 +336,7 @@ function showTtBanner(text, ms = 1100) {
 }
 
 function startTtRound(isFirst) {
-  const r = ttRounds[ttRoundIndex];
+  const r = ensureTtRound(ttRoundIndex);
   if (!r) return;
   difficulty = r.diff;
   ttTimeLeft = r.time;
@@ -347,10 +365,6 @@ function completeTtRound() {
   state = "idle";
   vx = 0;
   vy = 0;
-  if (ttRoundIndex >= ttRounds.length - 1) {
-    finishTimeTrial(true);
-    return;
-  }
   showTtBanner("Manche suivante !", 900);
   clearTimeout(completeTtRound._t);
   completeTtRound._t = setTimeout(() => {
