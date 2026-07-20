@@ -13,6 +13,7 @@ const soundBtnMenu = document.getElementById("soundBtnMenu");
 const soundBtnGame = document.getElementById("soundBtnGame");
 const menu = document.getElementById("menu");
 const game = document.getElementById("game");
+const gameFlip = document.getElementById("gameFlip");
 const loseScreen = document.getElementById("loseScreen");
 const loseScoreVal = document.getElementById("loseScoreVal");
 const hudTeamFlag = document.getElementById("hudTeamFlag");
@@ -435,12 +436,19 @@ function fillDuelLives(el, n) {
 function clearDuelChrome() {
   if (!game) return;
   game.classList.remove("is-duel-p1", "is-duel-p2");
+  if (gameFlip) {
+    gameFlip.classList.remove("is-flipped");
+    gameFlip.classList.remove("is-recap-shake");
+  }
 }
 
 function applyDuelChrome() {
   if (!game || playMode !== "duel") return;
   clearDuelChrome();
   game.classList.add(duelTurn === 1 ? "is-duel-p1" : "is-duel-p2");
+  if (gameFlip) {
+    gameFlip.classList.toggle("is-flipped", duelTurn === 2);
+  }
 }
 
 function beginDuel() {
@@ -1942,10 +1950,12 @@ function isDuelFlipped() {
 /** Coords jeu → écran (flip 180° pour J2) */
 function localToScreen(lx, ly, g) {
   const rect = g || hitRects.game || game.getBoundingClientRect();
+  const w = game.clientWidth;
+  const h = game.clientHeight;
   if (isDuelFlipped()) {
     return {
-      x: rect.left + rect.width - lx,
-      y: rect.top + rect.height - ly,
+      x: rect.left + (w - lx),
+      y: rect.top + (h - ly),
     };
   }
   return { x: rect.left + lx, y: rect.top + ly };
@@ -1957,8 +1967,8 @@ function screenToLocal(sx, sy, g) {
   let lx = sx - rect.left;
   let ly = sy - rect.top;
   if (isDuelFlipped()) {
-    lx = rect.width - lx;
-    ly = rect.height - ly;
+    lx = game.clientWidth - lx;
+    ly = game.clientHeight - ly;
   }
   return { x: lx, y: ly };
 }
@@ -1976,8 +1986,8 @@ function localPoint(e) {
   let x = e.clientX - rect.left;
   let y = e.clientY - rect.top;
   if (isDuelFlipped()) {
-    x = rect.width - x;
-    y = rect.height - y;
+    x = game.clientWidth - x;
+    y = game.clientHeight - y;
   }
   return { x, y, t: performance.now() };
 }
