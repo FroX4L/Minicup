@@ -424,11 +424,101 @@ body {
   animation-delay: 0.08s;
 }
 
-.start--diff {
-  background: #ffe082;
-  animation-delay: 0.05s;
-  height: 48px;
-  font-size: 1rem;
+.diff-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: rgba(8, 28, 14, 0.78);
+  animation: rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.diff-panel[hidden] {
+  display: none !important;
+}
+
+.diff-panel__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+
+.diff-panel__value {
+  margin: 0;
+  font-size: clamp(1.8rem, 8vw, 2.4rem);
+  font-weight: 800;
+  color: #ffd54a;
+  -webkit-text-stroke: 1.5px #e8862a;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 #d46a14, 0 4px 12px rgba(0, 0, 0, 0.35);
+  letter-spacing: -0.02em;
+}
+
+.diff-slider-wrap {
+  width: min(100%, 300px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.35rem 0.25rem 0.75rem;
+}
+
+.diff-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7cb342 0%, #ffd54a 50%, #e53935 100%);
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  outline: none;
+  cursor: pointer;
+}
+
+.diff-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ffd54a;
+  border: 3px solid #e8862a;
+  box-shadow: 0 2px 0 #d46a14, 0 3px 10px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+
+.diff-slider::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ffd54a;
+  border: 3px solid #e8862a;
+  box-shadow: 0 2px 0 #d46a14, 0 3px 10px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+
+.diff-slider__ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  padding: 0 0.15rem;
+}
+
+.diff-panel .start {
+  width: min(100%, 280px);
+  margin-top: 0.35rem;
 }
 
 .start:hover {

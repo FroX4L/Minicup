@@ -1,7 +1,9 @@
 const startBtn = document.getElementById("startBtn");
 const teamPickBtn = document.getElementById("teamPickBtn");
-const diffBtn = document.getElementById("diffBtn");
-const diffBtnLabel = document.getElementById("diffBtnLabel");
+const diffPanel = document.getElementById("diffPanel");
+const diffSlider = document.getElementById("diffSlider");
+const diffSliderLabel = document.getElementById("diffSliderLabel");
+const diffPlayBtn = document.getElementById("diffPlayBtn");
 const teamsPanel = document.getElementById("teamsPanel");
 const replayBtn = document.getElementById("replayBtn");
 const quitBtn = document.getElementById("quitBtn");
@@ -169,17 +171,59 @@ function diffCfg() {
   return DIFF[difficulty] || DIFF.normal;
 }
 
-function syncDiffButton() {
-  if (diffBtnLabel) {
-    diffBtnLabel.textContent = `Difficulté : ${DIFF_LABELS[difficulty] || "Normale"}`;
+function syncDiffSlider() {
+  const idx = Math.max(0, DIFF_ORDER.indexOf(difficulty));
+  if (diffSlider) {
+    diffSlider.value = String(idx);
+    diffSlider.setAttribute("aria-valuenow", String(idx));
+  }
+  if (diffSliderLabel) {
+    diffSliderLabel.textContent = DIFF_LABELS[difficulty] || "Normale";
   }
 }
 
-function cycleDifficulty() {
-  const i = DIFF_ORDER.indexOf(difficulty);
-  difficulty = DIFF_ORDER[(i + 1) % DIFF_ORDER.length];
-  saveValue("minicup-diff", difficulty);
-  syncDiffButton();
+function applyDiffSlider(save) {
+  if (!diffSlider) return;
+  const idx = clamp(Math.round(Number(diffSlider.value) || 0), 0, DIFF_ORDER.length - 1);
+  difficulty = DIFF_ORDER[idx];
+  if (diffSlider) diffSlider.setAttribute("aria-valuenow", String(idx));
+  if (diffSliderLabel) {
+    diffSliderLabel.textContent = DIFF_LABELS[difficulty] || "Normale";
+  }
+  if (save) saveValue("minicup-diff", difficulty);
+}
+
+function openDiffPanel() {
+  warmAudio();
+  if (teamsPanel) teamsPanel.hidden = true;
+  syncDiffSlider();
+  if (diffPanel) diffPanel.hidden = false;
+}
+
+function closeDiffPanel() {
+  if (diffPanel) diffPanel.hidden = true;
+}
+
+function beginMatch() {
+  applyDiffSlider(true);
+  closeDiffPanel();
+  if (teamsPanel) teamsPanel.hidden = true;
+  menu.hidden = true;
+  game.hidden = false;
+  updateHudTeamFlag();
+  requestAnimationFrame(() => {
+    layout();
+    buildPions();
+    score = 0;
+    goalCount = 0;
+    lives = 3;
+    gameOver = false;
+    resetGoalHits();
+    updateHud();
+    resetBall(false);
+    lastT = performance.now();
+    requestAnimationFrame(loop);
+  });
 }
 const KEEPER_BOB_PX = 3.5;
 const KEEPER_BASE_Y = 10; // descend un peu
@@ -665,6 +709,7 @@ function quitToMenu() {
   }
   if (loseScreen) loseScreen.hidden = true;
   if (teamsPanel) teamsPanel.hidden = true;
+  closeDiffPanel();
   if (ballEl) {
     ballEl.hidden = false;
     ballEl.style.opacity = "1";
@@ -970,18 +1015,26 @@ document.addEventListener("visibilitychange", () => {
 });
 
 bindPress(startBtn);
-bindPress(diffBtn);
+bindPress(diffPlayBtn);
 bindPress(teamPickBtn);
 bindPress(replayBtn);
 bindPress(quitBtn);
 
-syncDiffButton();
-if (diffBtn) {
-  diffBtn.addEventListener("click", () => cycleDifficulty());
+syncDiffSlider();
+
+if (diffSlider) {
+  diffSlider.addEventListener("input", () => applyDiffSlider(false));
+  diffSlider.addEventListener("change", () => {
+    applyDiffSlider(true);
+    playUiClick();
+  });
 }
 
 if (teamPickBtn) {
-  teamPickBtn.addEventListener("click", () => toggleTeamsPanel());
+  teamPickBtn.addEventListener("click", () => {
+    closeDiffPanel();
+    toggleTeamsPanel();
+  });
 }
 
 if (teamsPanel) {
@@ -990,26 +1043,19 @@ if (teamsPanel) {
   });
 }
 
-startBtn.addEventListener("click", () => {
-  warmAudio();
-  if (teamsPanel) teamsPanel.hidden = true;
-  menu.hidden = true;
-  game.hidden = false;
-  updateHudTeamFlag();
-  requestAnimationFrame(() => {
-    layout();
-    buildPions();
-    score = 0;
-    goalCount = 0;
-    lives = 3;
-    gameOver = false;
-    resetGoalHits();
-    updateHud();
-    resetBall(false);
-    lastT = performance.now();
-    requestAnimationFrame(loop);
+if (diffPanel) {
+  diffPanel.addEventListener("click", (e) => {
+    if (e.target === diffPanel) closeDiffPanel();
   });
-});
+}
+
+if (startBtn) {
+  startBtn.addEventListener("click", () => openDiffPanel());
+}
+
+if (diffPlayBtn) {
+  diffPlayBtn.addEventListener("click", () => beginMatch());
+}
 
 // Décode l’audio dès la 1ʳᵉ interaction menu
 ["pointerdown", "touchstart", "click"].forEach((ev) => {
