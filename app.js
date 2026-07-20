@@ -436,19 +436,12 @@ function fillDuelLives(el, n) {
 function clearDuelChrome() {
   if (!game) return;
   game.classList.remove("is-duel-p1", "is-duel-p2");
-  if (gameFlip) {
-    gameFlip.classList.remove("is-flipped");
-    gameFlip.classList.remove("is-recap-shake");
-  }
 }
 
 function applyDuelChrome() {
   if (!game || playMode !== "duel") return;
   clearDuelChrome();
   game.classList.add(duelTurn === 1 ? "is-duel-p1" : "is-duel-p2");
-  if (gameFlip) {
-    gameFlip.classList.toggle("is-flipped", duelTurn === 2);
-  }
 }
 
 function beginDuel() {
@@ -477,7 +470,7 @@ function beginDuel() {
     applyDuelChrome();
     updateHud();
     resetBall(false);
-    showTtBanner("Joueur 1 — bleu", 1400);
+    showTtBanner("Manche — Joueur 1", 1400);
     ensureLoop();
   });
 }
@@ -501,7 +494,7 @@ function scheduleDuelPass() {
     }
     hideGhost();
     resetBall(false);
-    showTtBanner(duelTurn === 1 ? "Passe → Joueur 1" : "Passe → Joueur 2", 1500);
+    showTtBanner(duelTurn === 1 ? "Manche — Joueur 1" : "Manche — Joueur 2", 1500);
     clearTimeout(scheduleDuelPass._ready);
     scheduleDuelPass._ready = setTimeout(() => {
       duelPaused = false;
@@ -1944,7 +1937,7 @@ function syncHitRects() {
 }
 
 function isDuelFlipped() {
-  return playMode === "duel" && duelTurn === 2;
+  return false;
 }
 
 /** Coords jeu → écran (flip 180° pour J2) */
