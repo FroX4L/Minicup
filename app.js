@@ -311,6 +311,7 @@ function startTtRound(isFirst) {
   ttTimeLeft = r.time;
   ttGoalsHave = 0;
   goalCount = 0;
+  lives = 3;
   ttPaused = false;
   keeperX = 0.42 + Math.random() * 0.16;
   keeperDir = Math.random() < 0.5 ? -1 : 1;
