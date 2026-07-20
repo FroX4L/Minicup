@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=103" />
+  <link rel="stylesheet" href="styles.css?v=104" />
 </head>
 <body>
   <main class="screen" id="menu">
@@ -35,6 +35,9 @@
     <div class="menu-actions">
       <button type="button" class="start" id="startBtn">
         <span>Démarrer</span>
+      </button>
+      <button type="button" class="start start--alt" id="minigamesBtn">
+        <span>Mini-jeux</span>
       </button>
       <button type="button" class="start start--alt" id="teamPickBtn">
         <span>Choix équipe</span>
@@ -67,6 +70,16 @@
       <button type="button" class="start" id="diffPlayBtn">
         <span>Jouer</span>
       </button>
+    </section>
+
+    <section class="minigames-panel" id="minigamesPanel" hidden aria-label="Mini-jeux">
+      <h2 class="minigames-panel__title">Mini-jeux</h2>
+      <div class="minigames-list" role="list">
+        <button type="button" class="minigame-card" id="minigameTimeTrial" role="listitem" disabled aria-disabled="true">
+          <span class="minigame-card__name">Course contre la montre</span>
+          <span class="minigame-card__badge">Bientôt</span>
+        </button>
+      </div>
     </section>
 
     <section class="teams" id="teamsPanel" hidden aria-label="Choix d'équipe">
@@ -247,7 +260,7 @@
     </div>
   </section>
 
-  <script src="app.js?v=125"></script>
+  <script src="app.js?v=126"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {

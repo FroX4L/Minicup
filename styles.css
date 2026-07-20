@@ -521,6 +521,96 @@ body {
   margin-top: 0.35rem;
 }
 
+.minigames-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: rgba(8, 28, 14, 0.78);
+  animation: rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.minigames-panel[hidden] {
+  display: none !important;
+}
+
+.minigames-panel__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+
+.minigames-list {
+  width: min(100%, 320px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.minigame-card {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 3px solid #e8862a;
+  background: #fff3c4;
+  color: #7a3e00;
+  font-family: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: left;
+  box-shadow: 0 2px 0 #d46a14, 0 4px 12px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.minigame-card:hover:not(:disabled) {
+  background: #ffe082;
+  transform: scale(1.02);
+}
+
+.minigame-card:active:not(:disabled),
+.minigame-card.is-pressed:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.minigame-card:disabled {
+  cursor: default;
+  opacity: 0.92;
+}
+
+.minigame-card__name {
+  flex: 1;
+  line-height: 1.2;
+}
+
+.minigame-card__badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7a3e00;
+  background: #ffd54a;
+  border: 2px solid #e8862a;
+  border-radius: 999px;
+  padding: 0.28rem 0.55rem;
+}
+
 .start:hover {
   background: #ffe066;
   box-shadow: 0 2px 0 #d46a14, 0 6px 14px rgba(0, 0, 0, 0.28);

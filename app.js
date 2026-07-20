@@ -1,5 +1,7 @@
 const startBtn = document.getElementById("startBtn");
 const teamPickBtn = document.getElementById("teamPickBtn");
+const minigamesBtn = document.getElementById("minigamesBtn");
+const minigamesPanel = document.getElementById("minigamesPanel");
 const diffPanel = document.getElementById("diffPanel");
 const diffSlider = document.getElementById("diffSlider");
 const diffSliderLabel = document.getElementById("diffSliderLabel");
@@ -195,6 +197,7 @@ function applyDiffSlider(save) {
 
 function openDiffPanel() {
   warmAudio();
+  closeMinigamesPanel();
   if (teamsPanel) teamsPanel.hidden = true;
   syncDiffSlider();
   if (diffPanel) diffPanel.hidden = false;
@@ -202,6 +205,19 @@ function openDiffPanel() {
 
 function closeDiffPanel() {
   if (diffPanel) diffPanel.hidden = true;
+}
+
+function openMinigamesPanel() {
+  playUiClick();
+  closeDiffPanel();
+  if (teamsPanel) teamsPanel.hidden = true;
+  if (minigamesPanel) {
+    minigamesPanel.hidden = !minigamesPanel.hidden;
+  }
+}
+
+function closeMinigamesPanel() {
+  if (minigamesPanel) minigamesPanel.hidden = true;
 }
 
 function beginMatch() {
@@ -710,6 +726,7 @@ function quitToMenu() {
   if (loseScreen) loseScreen.hidden = true;
   if (teamsPanel) teamsPanel.hidden = true;
   closeDiffPanel();
+  closeMinigamesPanel();
   if (ballEl) {
     ballEl.hidden = false;
     ballEl.style.opacity = "1";
@@ -978,6 +995,8 @@ function selectTeam(btn) {
 
 function toggleTeamsPanel() {
   if (!teamsPanel) return;
+  closeDiffPanel();
+  closeMinigamesPanel();
   if (teamsPanel.hidden) renderTeamScores();
   teamsPanel.hidden = !teamsPanel.hidden;
 }
@@ -1016,6 +1035,7 @@ document.addEventListener("visibilitychange", () => {
 
 bindPress(startBtn);
 bindPress(diffPlayBtn);
+bindPress(minigamesBtn);
 bindPress(teamPickBtn);
 bindPress(replayBtn);
 bindPress(quitBtn);
@@ -1030,9 +1050,20 @@ if (diffSlider) {
   });
 }
 
+if (minigamesBtn) {
+  minigamesBtn.addEventListener("click", () => openMinigamesPanel());
+}
+
+if (minigamesPanel) {
+  minigamesPanel.addEventListener("click", (e) => {
+    if (e.target === minigamesPanel) closeMinigamesPanel();
+  });
+}
+
 if (teamPickBtn) {
   teamPickBtn.addEventListener("click", () => {
     closeDiffPanel();
+    closeMinigamesPanel();
     toggleTeamsPanel();
   });
 }
